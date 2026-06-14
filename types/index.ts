@@ -5,6 +5,7 @@ export interface PerfumeMapping {
   fraiche_code: string
   gender: 'Dama' | 'Caballero' | 'Unisex' | null
   cost_per_gram: number | null          // ← Nuevo campo
+  link: string
   is_verified: boolean
   created_at: string
 }

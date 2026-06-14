@@ -91,58 +91,64 @@ export default function AdminPanel() {
 
   // Crear nueva fragancia con chequeo inteligente de duplicados
   const createNewItem = async () => {
-    if (!newItem.original_name || !newItem.fraiche_code) {
-      toast.error('Nombre y código Fraiche son obligatorios')
-      return
-    }
+	  if (!newItem.original_name || !newItem.fraiche_code) {
+		toast.error('Nombre y código Fraiche son obligatorios')
+		return
+	  }
 
-    const normalizedName = normalizeText(newItem.original_name)
-    const normalizedCode = normalizeText(newItem.fraiche_code)
+	  const normalizedNewName = normalizeText(newItem.original_name)
+	  const normalizedNewCode = normalizeText(newItem.fraiche_code)
 
-    // Buscar duplicados de forma inteligente
-    const { data: existing } = await supabase
-      .from('perfume_mappings')
-      .select('id, original_name, fraiche_code')
-      .limit(10)
+	  // Traer TODAS las fragancias para hacer el chequeo (más confiable)
+	  const { data: existing, error } = await supabase
+		.from('perfume_mappings')
+		.select('id, original_name, fraiche_code')
 
-    const duplicates = (existing || []).filter(item => {
-      const itemName = normalizeText(item.original_name)
-      const itemCode = normalizeText(item.fraiche_code)
-      return itemName === normalizedName || itemCode === normalizedCode
-    })
+	  if (error) {
+		toast.error('Error al verificar duplicados')
+		return
+	  }
 
-    if (duplicates.length > 0) {
-      const confirmMessage = duplicates
-        .map(d => `• ${d.original_name} (${d.fraiche_code})`)
-        .join('\n')
+	  // Chequeo inteligente de duplicados (ignora mayúsculas y acentos)
+	  const duplicates = (existing || []).filter(item => {
+		const itemName = normalizeText(item.original_name)
+		const itemCode = normalizeText(item.fraiche_code)
 
-      const confirmAdd = window.confirm(
-        `Ya existe una fragancia similar:\n\n${confirmMessage}\n\n¿Deseas agregarla de todas formas?`
-      )
+		return itemName === normalizedNewName || itemCode === normalizedNewCode
+	  })
 
-      if (!confirmAdd) return
-    }
+	  if (duplicates.length > 0) {
+		const confirmMessage = duplicates
+		  .map(d => `• ${d.original_name} (${d.fraiche_code})`)
+		  .join('\n')
 
-    // Insertar
-    const { error } = await supabase.from('perfume_mappings').insert({
-      original_name: newItem.original_name,
-      brand: newItem.brand || null,
-      fraiche_code: newItem.fraiche_code,
-      gender: newItem.gender,
-      cost_per_gram: newItem.cost_per_gram ? parseFloat(newItem.cost_per_gram) : null,
-      link: newItem.link || null,
-      is_verified: true,
-    })
+		const confirmAdd = window.confirm(
+		  `Ya existe una fragancia similar:\n\n${confirmMessage}\n\n¿Deseas agregarla de todas formas?`
+		)
 
-    if (error) {
-      toast.error('Error al crear la entrada')
-    } else {
-      toast.success('Fragancia agregada correctamente')
-      setShowCreateModal(false)
-      setNewItem({ original_name: '', brand: '', fraiche_code: '', gender: 'Caballero', cost_per_gram: '', link: '' })
-      fetchMappings(sortBy)
-    }
-  }
+		if (!confirmAdd) return
+	  }
+
+	  // Insertar si pasó la validación
+	  const { error: insertError } = await supabase.from('perfume_mappings').insert({
+		original_name: newItem.original_name,
+		brand: newItem.brand || null,
+		fraiche_code: newItem.fraiche_code,
+		gender: newItem.gender,
+		cost_per_gram: newItem.cost_per_gram ? parseFloat(newItem.cost_per_gram) : null,
+		link: newItem.link || null,
+		is_verified: true,
+	  })
+
+	  if (insertError) {
+		toast.error('Error al crear la entrada')
+	  } else {
+		toast.success('Fragancia agregada correctamente')
+		setShowCreateModal(false)
+		setNewItem({ original_name: '', brand: '', fraiche_code: '', gender: 'Caballero', cost_per_gram: '', link: '' })
+		fetchMappings(sortBy)
+	  }
+	}
 
   const verifyMapping = async (id: string) => {
     await supabase.from('perfume_mappings').update({ is_verified: true }).eq('id', id)

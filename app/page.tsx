@@ -58,6 +58,7 @@ export default function FraicheFinder() {
 
       return { data: data || [], count: count || 0 }
     },
+	initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
       const loaded = allPages.reduce((acc, page) => acc + page.data.length, 0)
       return loaded < lastPage.count ? allPages.length : undefined

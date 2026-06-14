@@ -178,15 +178,6 @@ export default function RankingsPage() {
                 )
               })}
             </div>
-
-            {/* Información de resultados */}
-            <div className="mt-8 text-center text-sm text-zinc-500">
-              Mostrando <span className="font-semibold">{displayedRankings.length}</span> de{' '}
-              <span className="font-semibold">{filteredRankings.length}</span> fragancias
-              {filteredRankings.length > itemsPerPage && (
-                <span> (usa el buscador o cambia el filtro para ver más)</span>
-              )}
-            </div>
           </>
         )}
       </div>

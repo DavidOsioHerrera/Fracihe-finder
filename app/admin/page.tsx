@@ -14,6 +14,7 @@ export default function AdminPanel() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [editingItem, setEditingItem] = useState<PerfumeMapping | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [sortBy, setSortBy] = useState<'created_at' | 'original_name'>('created_at')
 
   const [newItem, setNewItem] = useState({
     original_name: '',
@@ -26,7 +27,16 @@ export default function AdminPanel() {
 
   const router = useRouter()
 
-  // Verificar si el usuario es admin
+  // Función para normalizar texto (quitar acentos y pasar a minúsculas)
+  const normalizeText = (text: string) => {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+  }
+
+  // Verificar si es admin
   useEffect(() => {
     const checkAdmin = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -55,13 +65,22 @@ export default function AdminPanel() {
     checkAdmin()
   }, [router])
 
-  const fetchMappings = async () => {
-    const { data } = await supabase
+  const fetchMappings = async (sortType: 'created_at' | 'original_name' = sortBy) => {
+    setLoading(true)
+
+    const orderField = sortType === 'created_at' ? 'created_at' : 'original_name'
+    const ascending = sortType === 'original_name'
+
+    const { data, error } = await supabase
       .from('perfume_mappings')
       .select('*')
-      .order('created_at', { ascending: false })
+      .order(orderField, { ascending })
 
-    if (data) setMappings(data)
+    if (error) {
+      toast.error('Error al cargar las fragancias')
+    } else if (data) {
+      setMappings(data)
+    }
     setLoading(false)
   }
 
@@ -70,13 +89,41 @@ export default function AdminPanel() {
     item.fraiche_code.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  // Crear nueva fragancia
+  // Crear nueva fragancia con chequeo inteligente de duplicados
   const createNewItem = async () => {
     if (!newItem.original_name || !newItem.fraiche_code) {
       toast.error('Nombre y código Fraiche son obligatorios')
       return
     }
 
+    const normalizedName = normalizeText(newItem.original_name)
+    const normalizedCode = normalizeText(newItem.fraiche_code)
+
+    // Buscar duplicados de forma inteligente
+    const { data: existing } = await supabase
+      .from('perfume_mappings')
+      .select('id, original_name, fraiche_code')
+      .limit(10)
+
+    const duplicates = (existing || []).filter(item => {
+      const itemName = normalizeText(item.original_name)
+      const itemCode = normalizeText(item.fraiche_code)
+      return itemName === normalizedName || itemCode === normalizedCode
+    })
+
+    if (duplicates.length > 0) {
+      const confirmMessage = duplicates
+        .map(d => `• ${d.original_name} (${d.fraiche_code})`)
+        .join('\n')
+
+      const confirmAdd = window.confirm(
+        `Ya existe una fragancia similar:\n\n${confirmMessage}\n\n¿Deseas agregarla de todas formas?`
+      )
+
+      if (!confirmAdd) return
+    }
+
+    // Insertar
     const { error } = await supabase.from('perfume_mappings').insert({
       original_name: newItem.original_name,
       brand: newItem.brand || null,
@@ -93,21 +140,21 @@ export default function AdminPanel() {
       toast.success('Fragancia agregada correctamente')
       setShowCreateModal(false)
       setNewItem({ original_name: '', brand: '', fraiche_code: '', gender: 'Caballero', cost_per_gram: '', link: '' })
-      fetchMappings()
+      fetchMappings(sortBy)
     }
   }
 
   const verifyMapping = async (id: string) => {
     await supabase.from('perfume_mappings').update({ is_verified: true }).eq('id', id)
     toast.success('Verificado')
-    fetchMappings()
+    fetchMappings(sortBy)
   }
 
   const deleteMapping = async (id: string) => {
     if (!confirm('¿Eliminar esta entrada?')) return
     await supabase.from('perfume_mappings').delete().eq('id', id)
     toast.success('Eliminado')
-    fetchMappings()
+    fetchMappings(sortBy)
   }
 
   const saveEdit = async () => {
@@ -127,7 +174,7 @@ export default function AdminPanel() {
     } else {
       toast.success('Cambios guardados')
       setEditingItem(null)
-      fetchMappings()
+      fetchMappings(sortBy)
     }
   }
 
@@ -137,11 +184,7 @@ export default function AdminPanel() {
   }
 
   if (loading || !isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        Verificando permisos...
-      </div>
-    )
+    return <div className="min-h-screen flex items-center justify-center bg-white">Verificando permisos...</div>
   }
 
   return (
@@ -158,6 +201,23 @@ export default function AdminPanel() {
           </div>
           <button onClick={handleLogout} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-zinc-100 hover:bg-zinc-200">
             <LogOut size={18} /> Cerrar sesión
+          </button>
+        </div>
+
+        {/* Selector de ordenamiento */}
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-sm text-zinc-600">Ordenar por:</span>
+          <button
+            onClick={() => { setSortBy('created_at'); fetchMappings('created_at') }}
+            className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-all ${sortBy === 'created_at' ? 'bg-[#20cbd4] text-white' : 'bg-white border border-zinc-300 hover:bg-zinc-50'}`}
+          >
+            Más reciente
+          </button>
+          <button
+            onClick={() => { setSortBy('original_name'); fetchMappings('original_name') }}
+            className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-all ${sortBy === 'original_name' ? 'bg-[#20cbd4] text-white' : 'bg-white border border-zinc-300 hover:bg-zinc-50'}`}
+          >
+            Alfabético (A-Z)
           </button>
         </div>
 

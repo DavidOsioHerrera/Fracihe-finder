@@ -73,16 +73,33 @@ export default function RankingsPage() {
         </div>
 
         {/* Buscador */}
-        <div className="relative mb-6 max-w-md">
-          <Search className="absolute left-5 top-3.5 text-zinc-400" size={20} />
-          <input
-            type="text"
-            placeholder="Buscar por nombre o marca..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white border border-zinc-300 rounded-3xl pl-12 pr-6 py-3 text-lg focus:border-[#20cbd4] outline-none"
-          />
-        </div>
+		<div className="max-w-md mb-2">
+		  <div className="relative">
+			<Search className="absolute left-5 top-3.5 text-zinc-400" size={20} />
+			<input
+			  type="text"
+			  placeholder="Buscar por nombre o marca..."
+			  value={searchTerm}
+			  onChange={(e) => setSearchTerm(e.target.value)}
+			  className="w-full bg-white border border-zinc-300 rounded-3xl pl-12 pr-6 py-3 text-lg focus:border-[#20cbd4] outline-none"
+			/>
+		  </div>
+
+		  {/* Leyenda de cantidad de fragancias */}
+		  {!loading && filteredRankings.length > 0 && (
+			<p className="text-sm text-zinc-500 mt-2 ml-1">
+			  Mostrando{' '}
+			  <span className="font-semibold text-zinc-700">
+				{Math.min(itemsPerPage, filteredRankings.length)}
+			  </span>{' '}
+			  de{' '}
+			  <span className="font-semibold text-zinc-700">
+				{filteredRankings.length}
+			  </span>{' '}
+			  fragancias
+			</p>
+		  )}
+		</div>
 
         {/* Filtros */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">

@@ -276,34 +276,69 @@ export default function FraicheFinder() {
       </div>
 
       {/* Buscador + Filtros */}
-      <div className="max-w-5xl mx-auto px-6 sticky top-0 bg-white z-50 pb-6 border-b border-zinc-100">
-        <div className="flex gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-5 top-4 text-zinc-400" size={20} />
-            <input type="text" placeholder="Busca un perfume..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-white border border-zinc-300 rounded-3xl pl-12 pr-6 py-4 text-lg focus:border-[#20cbd4] outline-none" />
-          </div>
+		<div className="max-w-5xl mx-auto px-6 sticky top-0 bg-white z-50 pb-6 border-b border-zinc-100">
+		  
+		  {/* Buscador */}
+		  <div className="flex gap-3 mb-3">
+			<div className="relative flex-1">
+			  <Search className="absolute left-5 top-4 text-zinc-400" size={20} />
+			  <input
+				type="text"
+				placeholder="Busca un perfume..."
+				value={searchTerm}
+				onChange={(e) => setSearchTerm(e.target.value)}
+				className="w-full bg-white border border-zinc-300 rounded-3xl pl-12 pr-6 py-4 text-lg focus:border-[#20cbd4] outline-none"
+			  />
+			</div>
 
-          <div className="relative">
-            <button onClick={() => setShowFilterMenu(!showFilterMenu)} className="flex items-center gap-2 px-5 py-4 rounded-3xl border border-zinc-300 hover:bg-zinc-50">
-              <Filter size={18} /> Filtros
-            </button>
+			<div className="relative">
+			  <button 
+				onClick={() => setShowFilterMenu(!showFilterMenu)} 
+				className="flex items-center gap-2 px-5 py-4 rounded-3xl border border-zinc-300 hover:bg-zinc-50"
+			  >
+				<Filter size={18} /> Filtros
+			  </button>
 
-            {showFilterMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border border-zinc-200 rounded-2xl shadow-lg py-2 z-50">
-                {(['Todos', 'Dama', 'Caballero', 'Unisex'] as const).map(g => (
-                  <button key={g} onClick={() => { setGenderFilter(g); setShowFilterMenu(false) }} className={`w-full text-left px-5 py-2.5 text-sm hover:bg-zinc-50 ${genderFilter === g ? 'bg-zinc-100 font-medium' : ''}`}>
-                    {g}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+			  {showFilterMenu && (
+				<div className="absolute right-0 mt-2 w-48 bg-white border border-zinc-200 rounded-2xl shadow-lg py-2 z-50">
+				  {(['Todos', 'Dama', 'Caballero', 'Unisex'] as const).map((g) => (
+					<button 
+					  key={g} 
+					  onClick={() => { setGenderFilter(g); setShowFilterMenu(false) }} 
+					  className={`w-full text-left px-5 py-2.5 text-sm hover:bg-zinc-50 ${genderFilter === g ? 'bg-zinc-100 font-medium' : ''}`}
+					>
+					  {g}
+					</button>
+				  ))}
+				</div>
+			  )}
+			</div>
 
-          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-6 py-4 rounded-3xl bg-[#20cbd4] hover:bg-[#1bb8c2] text-white font-semibold">
-            <Plus size={20} /> Sugerir
-          </button>
-        </div>
-      </div>
+			<button 
+			  onClick={() => setShowModal(true)} 
+			  className="flex items-center gap-2 px-6 py-4 rounded-3xl bg-[#20cbd4] hover:bg-[#1bb8c2] text-white font-semibold"
+			>
+			  <Plus size={20} /> Sugerir
+			</button>
+		  </div>
+
+		  {/* Leyenda de cantidad de fragancias (justo debajo del buscador) */}
+		  {!isPending && displayedResults.length > 0 && (
+			<div className="ml-1">
+			  {searchTerm.length > 0 ? (
+				<p className="text-sm text-zinc-500">
+				  Se encontraron <span className="font-semibold text-zinc-700">{displayedResults.length}</span> resultados
+				</p>
+			  ) : (
+				<p className="text-sm text-zinc-500">
+				  Mostrando <span className="font-semibold text-zinc-700">{displayedResults.length}</span> de{' '}
+				  <span className="font-semibold text-zinc-700">{totalFragrances}</span> fragancias
+				</p>
+			  )}
+			</div>
+		  )}
+
+		</div>
 
       {/* Resultados */}
       <div className="max-w-5xl mx-auto px-6 pb-20 pt-4">
@@ -383,15 +418,6 @@ export default function FraicheFinder() {
                 {isFetchingNextPage && <p className="text-zinc-500">Cargando más fragancias...</p>}
               </div>
             )}
-
-            {/* Leyenda */}
-            <div className="mt-8 text-center text-tm text-zinc-500">
-              {searchTerm.length > 0 ? (
-                <>Se encontraron <span className="font-semibold">{displayedResults.length}</span> resultados.</>
-              ) : (
-                <>Mostrando <span className="font-semibold">{displayedResults.length}</span> de <span className="font-semibold">{totalFragrances}</span> fragancias.</>
-              )}
-            </div>
           </>
         )}
       </div>

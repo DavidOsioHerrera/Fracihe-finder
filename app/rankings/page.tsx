@@ -54,11 +54,13 @@ export default function RankingsPage() {
   // Aplicar límite de resultados
   const displayedRankings = filteredRankings.slice(0, itemsPerPage)
 
-  const getApprovalRate = (likes: number = 0, dislikes: number = 0) => {
-    const total = likes + dislikes
-    if (total === 0) return 0
-    return Math.round((likes / total) * 100)
-  }
+  const getApprovalRate = (likes?: number | null, dislikes?: number | null) => {
+	  const l = likes ?? 0;
+	  const d = dislikes ?? 0;
+	  const total = l + d;
+	  if (total === 0) return 0;
+	  return Math.round((l / total) * 100);
+	}
 
   return (
     <div className="min-h-screen bg-white text-zinc-900">

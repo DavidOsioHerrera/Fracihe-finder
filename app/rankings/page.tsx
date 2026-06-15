@@ -111,10 +111,13 @@ export default function RankingsPage() {
     }
   }
 
-  const getApprovalRate = (likes: number = 0, dislikes: number = 0) => {
-    const total = likes + dislikes
-    return total === 0 ? 0 : Math.round((likes / total) * 100)
-  }
+	const getApprovalRate = (likes?: number | null, dislikes?: number | null) => {
+	  const l = likes ?? 0;
+	  const d = dislikes ?? 0;
+	  const total = l + d;
+	  if (total === 0) return 0;
+	  return Math.round((l / total) * 100);
+	}
 
   return (
     <div className="min-h-screen bg-white text-zinc-900">

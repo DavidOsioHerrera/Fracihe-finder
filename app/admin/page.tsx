@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { PerfumeMapping } from '@/types'
 import { Toaster, toast } from 'sonner'
-import { Check, Trash2, Edit2, LogOut, Home, Plus, X, Copy } from 'lucide-react'
+import { Check, Trash2, Edit2, LogOut, Home, Plus, X, Copy, ChevronLeft, ChevronRight } from 'lucide-react'
+import { createFragrance, updateFragrance, deleteFragrance, verifyFragrance } from './actions'
 
 export default function AdminPanel() {
   const [mappings, setMappings] = useState<PerfumeMapping[]>([])
@@ -15,6 +16,8 @@ export default function AdminPanel() {
   const [editingItem, setEditingItem] = useState<PerfumeMapping | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [sortBy, setSortBy] = useState<'created_at' | 'original_name'>('created_at')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
 
   const [newItem, setNewItem] = useState({
     original_name: '',
@@ -27,20 +30,27 @@ export default function AdminPanel() {
 
   const router = useRouter()
 
-  // Normalizar texto (para chequeo de duplicados inteligente)
-  const normalizeText = (text: string) => {
-    return text
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .trim()
+  // Cargar fragancias
+  const fetchMappings = async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('perfume_mappings')
+      .select('*')
+      .order(sortBy === 'created_at' ? 'created_at' : 'original_name', { 
+        ascending: sortBy === 'original_name' 
+      })
+
+    if (error) {
+      toast.error('Error al cargar las fragancias')
+    } else if (data) {
+      setMappings(data)
+    }
+    setLoading(false)
   }
 
-  // Verificar si es admin
   useEffect(() => {
     const checkAdmin = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-
       if (!user) {
         router.push('/login')
         return
@@ -65,114 +75,87 @@ export default function AdminPanel() {
     checkAdmin()
   }, [router])
 
-  const fetchMappings = async (sortType: 'created_at' | 'original_name' = sortBy) => {
-    setLoading(true)
+  // Resetear página cuando cambia la búsqueda
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, sortBy])
 
-    const orderField = sortType === 'created_at' ? 'created_at' : 'original_name'
-    const ascending = sortType === 'original_name'
-
-    const { data, error } = await supabase
-      .from('perfume_mappings')
-      .select('*')
-      .order(orderField, { ascending })
-
-    if (error) {
-      toast.error('Error al cargar las fragancias')
-    } else if (data) {
-      setMappings(data)
-    }
-    setLoading(false)
-  }
-
+  // Filtrado
   const filteredMappings = mappings.filter(item =>
     item.original_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.fraiche_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.brand && item.brand.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
-  // Crear nueva fragancia con chequeo inteligente de duplicados
-  const createNewItem = async () => {
-    if (!newItem.original_name || !newItem.fraiche_code) {
-      toast.error('Nombre y código Fraiche son obligatorios')
-      return
-    }
+  // Paginación
+  const totalPages = Math.ceil(filteredMappings.length / itemsPerPage)
+  const paginatedMappings = filteredMappings.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
 
-    const normalizedNewName = normalizeText(newItem.original_name)
-    const normalizedNewCode = normalizeText(newItem.fraiche_code)
+  // Crear fragancia
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const formData = new FormData()
+      formData.append('original_name', newItem.original_name)
+      formData.append('brand', newItem.brand)
+      formData.append('fraiche_code', newItem.fraiche_code)
+      formData.append('gender', newItem.gender)
+      formData.append('cost_per_gram', newItem.cost_per_gram)
+      formData.append('link', newItem.link)
 
-    const { data: existing } = await supabase
-      .from('perfume_mappings')
-      .select('id, original_name, fraiche_code')
-
-    const duplicates = (existing || []).filter(item => {
-      const itemName = normalizeText(item.original_name)
-      const itemCode = normalizeText(item.fraiche_code)
-      return itemName === normalizedNewName || itemCode === normalizedNewCode
-    })
-
-    if (duplicates.length > 0) {
-      const confirmMessage = duplicates
-        .map(d => `• ${d.original_name} (${d.fraiche_code})`)
-        .join('\n')
-
-      const confirmAdd = window.confirm(
-        `Ya existe una fragancia similar:\n\n${confirmMessage}\n\n¿Deseas agregarla de todas formas?`
-      )
-
-      if (!confirmAdd) return
-    }
-
-    const { error } = await supabase.from('perfume_mappings').insert({
-      original_name: newItem.original_name,
-      brand: newItem.brand || null,
-      fraiche_code: newItem.fraiche_code,
-      gender: newItem.gender,
-      cost_per_gram: newItem.cost_per_gram ? parseFloat(newItem.cost_per_gram) : null,
-      link: newItem.link || null,
-      is_verified: true,
-    })
-
-    if (error) {
-      toast.error('Error al crear la entrada')
-    } else {
-      toast.success('Fragancia agregada correctamente')
+      await createFragrance(formData)
+      toast.success('Fragancia creada correctamente')
       setShowCreateModal(false)
       setNewItem({ original_name: '', brand: '', fraiche_code: '', gender: 'Caballero', cost_per_gram: '', link: '' })
-      fetchMappings(sortBy)
+      fetchMappings()
+    } catch (error: any) {
+      toast.error(error.message || 'Error al crear la fragancia')
     }
   }
 
-  const verifyMapping = async (id: string) => {
-    await supabase.from('perfume_mappings').update({ is_verified: true }).eq('id', id)
-    toast.success('Verificado')
-    fetchMappings(sortBy)
-  }
-
-  const deleteMapping = async (id: string) => {
-    if (!confirm('¿Eliminar esta entrada?')) return
-    await supabase.from('perfume_mappings').delete().eq('id', id)
-    toast.success('Eliminado')
-    fetchMappings(sortBy)
-  }
-
-  const saveEdit = async () => {
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
     if (!editingItem) return
 
-    const { error } = await supabase.from('perfume_mappings').update({
-      original_name: editingItem.original_name,
-      brand: editingItem.brand,
-      fraiche_code: editingItem.fraiche_code,
-      gender: editingItem.gender,
-      cost_per_gram: editingItem.cost_per_gram,
-      link: editingItem.link,
-    }).eq('id', editingItem.id)
+    try {
+      const formData = new FormData()
+      formData.append('original_name', editingItem.original_name)
+      formData.append('brand', editingItem.brand || '')
+      formData.append('fraiche_code', editingItem.fraiche_code)
+      formData.append('gender', editingItem.gender || '')
+      formData.append('cost_per_gram', editingItem.cost_per_gram?.toString() || '')
+      formData.append('link', editingItem.link || '')
 
-    if (error) {
-      toast.error('Error al guardar')
-    } else {
-      toast.success('Cambios guardados')
+      await updateFragrance(editingItem.id, formData)
+      toast.success('Fragancia actualizada')
       setEditingItem(null)
-      fetchMappings(sortBy)
+      fetchMappings()
+    } catch (error: any) {
+      toast.error(error.message)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('¿Eliminar esta fragancia?')) return
+    try {
+      await deleteFragrance(id)
+      toast.success('Fragancia eliminada')
+      fetchMappings()
+    } catch (error: any) {
+      toast.error(error.message)
+    }
+  }
+
+  const handleVerify = async (id: string) => {
+    try {
+      await verifyFragrance(id)
+      toast.success('Fragancia verificada')
+      fetchMappings()
+    } catch (error: any) {
+      toast.error(error.message)
     }
   }
 
@@ -193,7 +176,7 @@ export default function AdminPanel() {
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-4">
             <a href="/" className="flex items-center gap-2 text-zinc-500 hover:text-zinc-700">
-              <Home size={20} /> Volver al inicio
+              <Home size={20} /> Volver
             </a>
             <h1 className="text-3xl font-bold">Panel de Administración</h1>
           </div>
@@ -202,37 +185,40 @@ export default function AdminPanel() {
           </button>
         </div>
 
-        {/* Selector de ordenamiento */}
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-sm text-zinc-600">Ordenar por:</span>
-          <button
-            onClick={() => { setSortBy('created_at'); fetchMappings('created_at') }}
-            className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-all ${sortBy === 'created_at' ? 'bg-[#20cbd4] text-white' : 'bg-white border border-zinc-300 hover:bg-zinc-50'}`}
-          >
-            Más reciente
-          </button>
-          <button
-            onClick={() => { setSortBy('original_name'); fetchMappings('original_name') }}
-            className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-all ${sortBy === 'original_name' ? 'bg-[#20cbd4] text-white' : 'bg-white border border-zinc-300 hover:bg-zinc-50'}`}
-          >
-            Alfabético (A-Z)
-          </button>
+        {/* Ordenamiento + Buscador + Total */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm text-zinc-600">Ordenar por:</span>
+              <button onClick={() => { setSortBy('created_at'); fetchMappings() }} className={`px-4 py-1.5 rounded-xl text-sm font-medium ${sortBy === 'created_at' ? 'bg-[#20cbd4] text-white' : 'bg-white border border-zinc-300'}`}>
+                Más reciente
+              </button>
+              <button onClick={() => { setSortBy('original_name'); fetchMappings() }} className={`px-4 py-1.5 rounded-xl text-sm font-medium ${sortBy === 'original_name' ? 'bg-[#20cbd4] text-white' : 'bg-white border border-zinc-300'}`}>
+                Alfabético
+              </button>
+            </div>
+
+            {/* Cantidad total de fragancias */}
+            <p className="text-sm text-zinc-600 ml-1">
+              Total de fragancias registradas: <span className="font-semibold text-zinc-800">{mappings.length}</span>
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <input
+              type="text"
+              placeholder="Buscar por nombre, marca o código..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full md:w-80 border border-zinc-300 rounded-2xl px-5 py-3"
+            />
+            <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#20cbd4] text-white font-semibold">
+              <Plus size={18} /> Agregar
+            </button>
+          </div>
         </div>
 
-        <div className="flex justify-between items-center mb-6">
-          <input
-            type="text"
-            placeholder="Buscar por nombre, marca o código Fraiche..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full max-w-md border border-zinc-300 rounded-2xl px-5 py-3"
-          />
-          <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#20cbd4] text-white font-semibold">
-            <Plus size={18} /> Agregar nueva
-          </button>
-        </div>
-
-        {/* Tabla */}
+        {/* Tabla con paginación */}
         <div className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
           <table className="w-full">
             <thead className="bg-zinc-50">
@@ -240,42 +226,64 @@ export default function AdminPanel() {
                 <th className="text-left p-5">Perfume</th>
                 <th className="text-left p-5">Marca</th>
                 <th className="text-left p-5">Código Fraiche</th>
-                <th className="text-left p-5">Género</th>
-                <th className="text-left p-5">Costo/g</th>
-                <th className="text-center p-5">Likes</th>
-                <th className="text-center p-5">Dislikes</th>
                 <th className="text-center p-5">Estado</th>
                 <th className="text-right p-5 pr-8">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {filteredMappings.map(item => (
-                <tr key={item.id} className="border-t border-zinc-100">
-                  <td className="p-5 font-medium">{item.original_name}</td>
-                  <td className="p-5 text-sm text-zinc-600">{item.brand || <span className="text-zinc-400 italic">—</span>}</td>
-                  <td className="p-5 font-mono text-[#20cbd4]">{item.fraiche_code}</td>
-                  <td className="p-5 text-sm">{item.gender}</td>
-                  <td className="p-5 text-sm">{item.cost_per_gram ? `$${item.cost_per_gram}` : '-'}</td>
-                  <td className="p-5 text-center text-green-600 font-medium">{item.likes || 0}</td>
-                  <td className="p-5 text-center text-red-600 font-medium">{item.dislikes || 0}</td>
-                  <td className="p-5 text-center">
-                    {item.is_verified 
-                      ? <span className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-full">Verificado</span>
-                      : <span className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">Pendiente</span>
-                    }
-                  </td>
-                  <td className="p-5 text-right pr-6">
-                    <div className="flex justify-end gap-2">
-                      {!item.is_verified && <button onClick={() => verifyMapping(item.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-xl"><Check size={18}/></button>}
-                      <button onClick={() => setEditingItem(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl"><Edit2 size={18}/></button>
-                      <button onClick={() => deleteMapping(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl"><Trash2 size={18}/></button>
-                    </div>
-                  </td>
+              {paginatedMappings.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-zinc-500">No se encontraron resultados</td>
                 </tr>
-              ))}
+              ) : (
+                paginatedMappings.map(item => (
+                  <tr key={item.id} className="border-t border-zinc-100">
+                    <td className="p-5 font-medium">{item.original_name}</td>
+                    <td className="p-5 text-sm text-zinc-600">{item.brand || <span className="text-zinc-400">—</span>}</td>
+                    <td className="p-5 font-mono text-[#20cbd4]">{item.fraiche_code}</td>
+                    <td className="p-5 text-center">
+                      {item.is_verified 
+                        ? <span className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-full">Verificado</span>
+                        : <span className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">Pendiente</span>}
+                    </td>
+                    <td className="p-5 text-right pr-6">
+                      <div className="flex justify-end gap-2">
+                        {!item.is_verified && <button onClick={() => handleVerify(item.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-xl"><Check size={18}/></button>}
+                        <button onClick={() => setEditingItem(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl"><Edit2 size={18}/></button>
+                        <button onClick={() => handleDelete(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl"><Trash2 size={18}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
+
+        {/* Paginación */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-4 mt-6">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+              disabled={currentPage === 1}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-300 disabled:opacity-50"
+            >
+              <ChevronLeft size={18} /> Anterior
+            </button>
+            
+            <span className="text-sm text-zinc-600">
+              Página {currentPage} de {totalPages}
+            </span>
+
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-300 disabled:opacity-50"
+            >
+              Siguiente <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modal Crear */}
@@ -284,29 +292,13 @@ export default function AdminPanel() {
           <div className="bg-white rounded-3xl w-full max-w-md p-8 relative">
             <button onClick={() => setShowCreateModal(false)} className="absolute top-6 right-6"><X size={22} /></button>
             <h3 className="text-xl font-semibold mb-6">Agregar nueva fragancia</h3>
-            <div className="space-y-4">
-              <input placeholder="Nombre del perfume *" value={newItem.original_name} onChange={e => setNewItem({...newItem, original_name: e.target.value})} className="w-full border border-zinc-300 rounded-2xl px-5 py-3" />
+            <form onSubmit={handleCreate} className="space-y-4">
+              <input placeholder="Nombre del perfume *" value={newItem.original_name} onChange={e => setNewItem({...newItem, original_name: e.target.value})} className="w-full border border-zinc-300 rounded-2xl px-5 py-3" required />
               <input placeholder="Marca" value={newItem.brand} onChange={e => setNewItem({...newItem, brand: e.target.value})} className="w-full border border-zinc-300 rounded-2xl px-5 py-3" />
               
-              {/* Campo Código Fraiche con botón de copiar */}
               <div className="relative">
-                <input 
-                  placeholder="Código Fraiche *" 
-                  value={newItem.fraiche_code} 
-                  onChange={e => setNewItem({...newItem, fraiche_code: e.target.value})} 
-                  className="w-full border border-zinc-300 rounded-2xl px-5 py-3 pr-12 font-mono" 
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (newItem.fraiche_code) {
-                      navigator.clipboard.writeText(newItem.fraiche_code)
-                      toast.success('Código copiado')
-                    }
-                  }}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors"
-                  title="Copiar código"
-                >
+                <input placeholder="Código Fraiche *" value={newItem.fraiche_code} onChange={e => setNewItem({...newItem, fraiche_code: e.target.value})} className="w-full border border-zinc-300 rounded-2xl px-5 py-3 pr-12 font-mono" required />
+                <button type="button" onClick={() => { if (newItem.fraiche_code) { navigator.clipboard.writeText(newItem.fraiche_code); toast.success('Copiado') }}} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
                   <Copy size={18} />
                 </button>
               </div>
@@ -320,8 +312,8 @@ export default function AdminPanel() {
                 <input type="number" step="0.01" placeholder="Costo por gramo" value={newItem.cost_per_gram} onChange={e => setNewItem({...newItem, cost_per_gram: e.target.value})} className="border border-zinc-300 rounded-2xl px-5 py-3" />
               </div>
               <input placeholder="Link (URL)" value={newItem.link} onChange={e => setNewItem({...newItem, link: e.target.value})} className="w-full border border-zinc-300 rounded-2xl px-5 py-3" />
-            </div>
-            <button onClick={createNewItem} className="w-full mt-6 py-3 rounded-2xl bg-[#20cbd4] text-white font-semibold">Agregar fragancia</button>
+              <button type="submit" className="w-full py-3 rounded-2xl bg-[#20cbd4] text-white font-semibold">Crear fragancia</button>
+            </form>
           </div>
         </div>
       )}
@@ -330,8 +322,8 @@ export default function AdminPanel() {
       {editingItem && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-8">
-            <h3 className="text-xl font-semibold mb-6">Editar entrada</h3>
-            <div className="space-y-4">
+            <h3 className="text-xl font-semibold mb-6">Editar fragancia</h3>
+            <form onSubmit={handleUpdate} className="space-y-4">
               <input className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.original_name} onChange={e => setEditingItem({...editingItem, original_name: e.target.value})} />
               <input className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.brand || ''} onChange={e => setEditingItem({...editingItem, brand: e.target.value})} />
               <input className="w-full border border-zinc-300 rounded-2xl px-5 py-3 font-mono" value={editingItem.fraiche_code} onChange={e => setEditingItem({...editingItem, fraiche_code: e.target.value})} />
@@ -343,12 +335,12 @@ export default function AdminPanel() {
                 </select>
                 <input type="number" step="0.01" className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.cost_per_gram || ''} onChange={e => setEditingItem({...editingItem, cost_per_gram: parseFloat(e.target.value) || null})} />
               </div>
-              <input placeholder="Link (URL)" className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.link || ''} onChange={e => setEditingItem({...editingItem, link: e.target.value})} />
-            </div>
-            <div className="flex gap-3 mt-8">
-              <button onClick={() => setEditingItem(null)} className="flex-1 py-3 rounded-2xl border border-zinc-300">Cancelar</button>
-              <button onClick={saveEdit} className="flex-1 py-3 rounded-2xl bg-[#20cbd4] text-white">Guardar cambios</button>
-            </div>
+              <input placeholder="Link" className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.link || ''} onChange={e => setEditingItem({...editingItem, link: e.target.value})} />
+              <div className="flex gap-3 mt-6">
+                <button type="button" onClick={() => setEditingItem(null)} className="flex-1 py-3 rounded-2xl border border-zinc-300">Cancelar</button>
+                <button type="submit" className="flex-1 py-3 rounded-2xl bg-[#20cbd4] text-white">Guardar cambios</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

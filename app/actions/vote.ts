@@ -1,46 +1,27 @@
 'use server'
 
 import { createClient } from '@/lib/supabase-server'
+import { ratelimit } from '@/lib/rate-limit'
 import { revalidatePath } from 'next/cache'
 
 // =====================================================
-// Rate Limiting (máximo 10 votos por minuto por usuario)
-// =====================================================
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
-
-function checkRateLimit(userId: string, limit = 10, windowMs = 60000): boolean {
-  const now = Date.now()
-  const record = rateLimitMap.get(userId)
-
-  if (!record || now > record.resetTime) {
-    rateLimitMap.set(userId, { count: 1, resetTime: now + windowMs })
-    return true
-  }
-
-  if (record.count >= limit) {
-    return false
-  }
-
-  record.count++
-  return true
-}
-
-// =====================================================
-// VOTAR EN UNA FRAGANCIA
+// VOTAR EN UNA FRAGANCIA (Like / Dislike)
 // =====================================================
 export async function voteOnFragrance(fragranceId: string, voteType: 'like' | 'dislike') {
   try {
     const supabase = await createClient()
 
     // 1. Verificar que el usuario esté autenticado
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    if (authError || !user) {
+    if (!user) {
       throw new Error('Debes iniciar sesión para votar')
     }
 
-    // 2. Rate Limiting
-    if (!checkRateLimit(user.id)) {
+    // 2. Rate Limiting con Upstash (máximo 10 votos por minuto)
+    const { success } = await ratelimit.limit(`vote:${user.id}`)
+
+    if (!success) {
       throw new Error('Estás votando demasiado rápido. Espera unos segundos.')
     }
 
@@ -54,69 +35,57 @@ export async function voteOnFragrance(fragranceId: string, voteType: 'like' | 'd
 
     const currentVote = existingVote?.vote_type
 
-    // 4. Si hace clic en el mismo voto → eliminarlo
+    // 4. Si hace clic en el mismo voto → eliminar el voto
     if (currentVote === voteType) {
-      const { error: deleteError } = await supabase
+      await supabase
         .from('fragrance_votes')
         .delete()
         .eq('user_id', user.id)
         .eq('fragrance_id', fragranceId)
 
-      if (deleteError) throw new Error('Error al eliminar el voto')
-
-      // Actualizar contadores
       await updateVoteCounts(supabase, fragranceId, currentVote, null)
-      
+
       revalidatePath('/')
       revalidatePath('/rankings')
-      return { success: true, message: 'Voto eliminado' }
+      return { success: true, action: 'removed' }
     }
 
-    // 5. Si ya tenía un voto diferente → actualizarlo
+    // 5. Si ya tenía voto diferente → actualizarlo, o crear nuevo voto
     if (currentVote) {
-      const { error: updateError } = await supabase
+      await supabase
         .from('fragrance_votes')
         .update({ vote_type: voteType })
         .eq('user_id', user.id)
         .eq('fragrance_id', fragranceId)
-
-      if (updateError) throw new Error('Error al cambiar el voto')
-
-      await updateVoteCounts(supabase, fragranceId, currentVote, voteType)
-    } 
-    // 6. Si no tenía voto → crearlo
-    else {
-      const { error: insertError } = await supabase
-        .from('fragrance_votes')
-        .insert({
-          user_id: user.id,
-          fragrance_id: fragranceId,
-          vote_type: voteType,
-        })
-
-      if (insertError) throw new Error('Error al registrar el voto')
-
-      await updateVoteCounts(supabase, fragranceId, null, voteType)
+    } else {
+      await supabase.from('fragrance_votes').insert({
+        user_id: user.id,
+        fragrance_id: fragranceId,
+        vote_type: voteType,
+      })
     }
+
+    // 6. Actualizar contadores de likes/dislikes
+    await updateVoteCounts(supabase, fragranceId, currentVote, voteType)
 
     revalidatePath('/')
     revalidatePath('/rankings')
 
-    return { success: true, message: 'Voto registrado correctamente' }
+    return { success: true, action: currentVote ? 'updated' : 'created' }
 
   } catch (error: any) {
     console.error('Error en voteOnFragrance:', error)
-    throw new Error(error.message || 'Ocurrió un error al procesar tu voto')
+    throw new Error(error.message || 'Error al procesar tu voto')
   }
 }
 
 // =====================================================
-// Función auxiliar para actualizar contadores
+// Función auxiliar para actualizar likes y dislikes
 // =====================================================
 async function updateVoteCounts(
-  supabase: any, 
-  fragranceId: string, 
-  previousVote: 'like' | 'dislike' | null, 
+  supabase: any,
+  fragranceId: string,
+  previousVote: 'like' | 'dislike' | null,
   newVote: 'like' | 'dislike' | null
 ) {
   const { data: fragrance, error } = await supabase
@@ -130,11 +99,11 @@ async function updateVoteCounts(
   let newLikes = fragrance.likes || 0
   let newDislikes = fragrance.dislikes || 0
 
-  // Restar voto anterior
+  // Restar el voto anterior (si existía)
   if (previousVote === 'like') newLikes = Math.max(0, newLikes - 1)
   if (previousVote === 'dislike') newDislikes = Math.max(0, newDislikes - 1)
 
-  // Sumar nuevo voto
+  // Sumar el nuevo voto
   if (newVote === 'like') newLikes++
   if (newVote === 'dislike') newDislikes++
 

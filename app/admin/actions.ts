@@ -4,10 +4,10 @@ import { createClient } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 
 // =====================================================
-// FUNCIÓN AUXILIAR: Verificar si el usuario es admin
+// Verificar si el usuario es administrador
 // =====================================================
 async function isAdmin() {
-  const supabase = createClient()
+  const supabase = await createClient()                    // ← Agregado await
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) return false
@@ -29,7 +29,7 @@ export async function createFragrance(formData: FormData) {
     throw new Error('No tienes permisos de administrador')
   }
 
-  const supabase = await createClient()
+  const supabase = await createClient()                    // ← Agregado await
 
   const { error } = await supabase.from('perfume_mappings').insert({
     original_name: formData.get('original_name') as string,
@@ -43,10 +43,7 @@ export async function createFragrance(formData: FormData) {
     is_verified: true,
   })
 
-  if (error) {
-    console.error(error)
-    throw new Error('Error al crear la fragancia')
-  }
+  if (error) throw new Error('Error al crear la fragancia')
 
   revalidatePath('/admin')
 }
@@ -59,7 +56,7 @@ export async function updateFragrance(id: string, formData: FormData) {
     throw new Error('No tienes permisos de administrador')
   }
 
-  const supabase = await createClient()
+  const supabase = await createClient()                    // ← Agregado await
 
   const { error } = await supabase
     .from('perfume_mappings')
@@ -75,10 +72,7 @@ export async function updateFragrance(id: string, formData: FormData) {
     })
     .eq('id', id)
 
-  if (error) {
-    console.error(error)
-    throw new Error('Error al actualizar la fragancia')
-  }
+  if (error) throw new Error('Error al actualizar la fragancia')
 
   revalidatePath('/admin')
 }
@@ -91,17 +85,14 @@ export async function deleteFragrance(id: string) {
     throw new Error('No tienes permisos de administrador')
   }
 
-  const supabase = await createClient()
+  const supabase = await createClient()                    // ← Agregado await
 
   const { error } = await supabase
     .from('perfume_mappings')
     .delete()
     .eq('id', id)
 
-  if (error) {
-    console.error(error)
-    throw new Error('Error al eliminar la fragancia')
-  }
+  if (error) throw new Error('Error al eliminar la fragancia')
 
   revalidatePath('/admin')
 }
@@ -114,17 +105,14 @@ export async function verifyFragrance(id: string) {
     throw new Error('No tienes permisos de administrador')
   }
 
-  const supabase = await createClient()
+  const supabase = await createClient()                    // ← Agregado await
 
   const { error } = await supabase
     .from('perfume_mappings')
     .update({ is_verified: true })
     .eq('id', id)
 
-  if (error) {
-    console.error(error)
-    throw new Error('Error al verificar la fragancia')
-  }
+  if (error) throw new Error('Error al verificar la fragancia')
 
   revalidatePath('/admin')
 }

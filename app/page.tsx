@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import Fuse from 'fuse.js'
-import { Search, Copy, Plus, ThumbsUp, ThumbsDown, LogIn, LogOut, User } from 'lucide-react'
+import { Search, Copy, Plus, ThumbsUp, ThumbsDown, LogIn, LogOut, User, ChevronLeft, ChevronRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { PerfumeMapping } from '@/types'
 import { Toaster, toast } from 'sonner'
@@ -16,6 +16,9 @@ export default function FraicheFinder() {
   const [searchTerm, setSearchTerm] = useState('')
   const [genderFilter, setGenderFilter] = useState<GenderFilter>('Todos')
   const [brandFilter, setBrandFilter] = useState<string>('Todas')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
+
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -55,7 +58,6 @@ export default function FraicheFinder() {
 
       const { data, error, count } = await query.range(from, to)
       if (error) throw error
-
       return { data: data || [], count: count || 0 }
     },
     initialPageParam: 0,
@@ -69,21 +71,25 @@ export default function FraicheFinder() {
   const allFragrances = infiniteData?.pages.flatMap(page => page.data) || []
   const totalFragrances = infiniteData?.pages[0]?.count || 0
 
-  // Marcas únicas
-  const uniqueBrands = Array.from(
-    new Set(allFragrances.map(item => item.brand).filter(Boolean))
-  ).sort()
+  // === Query para búsqueda (todas las fragancias) ===
+  const { data: searchData = [] } = useQuery({
+    queryKey: ['all-fragrances-search'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('perfume_mappings').select('*').order('original_name')
+      if (error) throw error
+      return data || []
+    },
+    enabled: searchTerm.length > 0,
+  })
+
+  const uniqueBrands = Array.from(new Set(allFragrances.map(item => item.brand).filter(Boolean))).sort()
 
   // === User Votes ===
   const { data: userVotes = {} } = useQuery({
     queryKey: ['userVotes', user?.id],
     queryFn: async () => {
       if (!user) return {}
-      const { data } = await supabase
-        .from('fragrance_votes')
-        .select('fragrance_id, vote_type')
-        .eq('user_id', user.id)
-
+      const { data } = await supabase.from('fragrance_votes').select('fragrance_id, vote_type').eq('user_id', user.id)
       const map: Record<string, 'like' | 'dislike'> = {}
       data?.forEach(v => { map[v.fragrance_id] = v.vote_type })
       return map
@@ -91,28 +97,46 @@ export default function FraicheFinder() {
     enabled: !!user,
   })
 
-  // === Filtrado combinado ===
-  const displayedResults = (() => {
-    let results = searchTerm.length > 0 ? allFragrances : allFragrances
+  // === Fuse.js optimizado con índice ===
+  const dataForSearch = searchTerm.length > 0 ? searchData : allFragrances
 
-    if (genderFilter !== 'Todos') {
-      results = results.filter(m => m.gender === genderFilter)
+  const fuseIndex = useMemo(() => {
+    return Fuse.createIndex(['original_name', 'brand', 'fraiche_code'], dataForSearch)
+  }, [dataForSearch])
+
+  const fuse = useMemo(() => {
+    return new Fuse(dataForSearch, {
+      keys: ['original_name', 'brand', 'fraiche_code'],
+      threshold: 0.35,
+      minMatchCharLength: 2,
+    }, fuseIndex)
+  }, [dataForSearch, fuseIndex])
+
+  // === Resultados finales ===
+  const filteredResults = useMemo(() => {
+    let results = searchTerm.length > 0 ? searchData : allFragrances
+
+    if (genderFilter !== 'Todos') results = results.filter(m => m.gender === genderFilter)
+    if (brandFilter !== 'Todas') results = results.filter(m => m.brand === brandFilter)
+
+    if (searchTerm.length > 1) {
+      return fuse.search(searchTerm).map(r => r.item)
     }
-
-    if (brandFilter !== 'Todas') {
-      results = results.filter(m => m.brand === brandFilter)
-    }
-
-    if (searchTerm) {
-      const fuse = new Fuse(results, {
-        keys: ['original_name', 'brand', 'fraiche_code'],
-        threshold: 0.35,
-      })
-      results = fuse.search(searchTerm).map(r => r.item)
-    }
-
     return results
-  })()
+  }, [searchTerm, genderFilter, brandFilter, searchData, allFragrances, fuse])
+
+  // Paginación solo cuando hay búsqueda
+  const totalPages = Math.ceil(filteredResults.length / itemsPerPage)
+  const paginatedResults = searchTerm.length > 0
+    ? filteredResults.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+    : filteredResults
+
+  const displayedResults = searchTerm.length > 0 ? paginatedResults : filteredResults
+
+  // Resetear página al cambiar búsqueda o filtros
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, genderFilter, brandFilter])
 
   // === Infinite Scroll ===
   useEffect(() => {
@@ -127,61 +151,45 @@ export default function FraicheFinder() {
       { threshold: 0.1 }
     )
 
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current)
-    }
-
+    if (loadMoreRef.current) observer.observe(loadMoreRef.current)
     observerRef.current = observer
 
-    return () => {
-      if (observerRef.current) observerRef.current.disconnect()
-    }
+    return () => observerRef.current?.disconnect()
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, searchTerm])
 
   // === Votación ===
   const voteMutation = useMutation({
     mutationFn: async ({ fragranceId, voteType }: { fragranceId: string; voteType: 'like' | 'dislike' }) => {
       if (!user) throw new Error('No autenticado')
-
       const currentVote = userVotes[fragranceId]
 
       if (currentVote === voteType) {
-        await supabase.from('fragrance_votes').delete()
-          .eq('user_id', user.id).eq('fragrance_id', fragranceId)
-
+        await supabase.from('fragrance_votes').delete().eq('user_id', user.id).eq('fragrance_id', fragranceId)
         const item = allFragrances.find(m => m.id === fragranceId)
         if (item) {
           const newLikes = voteType === 'like' ? Math.max(0, (item.likes || 0) - 1) : item.likes || 0
           const newDislikes = voteType === 'dislike' ? Math.max(0, (item.dislikes || 0) - 1) : item.dislikes || 0
-
           await supabase.from('perfume_mappings').update({ likes: newLikes, dislikes: newDislikes }).eq('id', fragranceId)
         }
         return { action: 'removed' }
       }
 
       if (currentVote) {
-        await supabase.from('fragrance_votes').update({ vote_type: voteType })
-          .eq('user_id', user.id).eq('fragrance_id', fragranceId)
+        await supabase.from('fragrance_votes').update({ vote_type: voteType }).eq('user_id', user.id).eq('fragrance_id', fragranceId)
       } else {
-        await supabase.from('fragrance_votes').insert({
-          user_id: user.id, fragrance_id: fragranceId, vote_type: voteType,
-        })
+        await supabase.from('fragrance_votes').insert({ user_id: user.id, fragrance_id: fragranceId, vote_type: voteType })
       }
 
       const item = allFragrances.find(m => m.id === fragranceId)
       if (item) {
         let newLikes = item.likes || 0
         let newDislikes = item.dislikes || 0
-
         if (currentVote === 'like') newLikes = Math.max(0, newLikes - 1)
         if (currentVote === 'dislike') newDislikes = Math.max(0, newDislikes - 1)
-
         if (voteType === 'like') newLikes++
         if (voteType === 'dislike') newDislikes++
-
         await supabase.from('perfume_mappings').update({ likes: newLikes, dislikes: newDislikes }).eq('id', fragranceId)
       }
-
       return { action: currentVote ? 'updated' : 'created' }
     },
     onSuccess: () => {
@@ -232,7 +240,6 @@ export default function FraicheFinder() {
     toast.info('Sesión cerrada')
   }
 
-  // Función para limpiar filtros
   const clearFilters = () => {
     setGenderFilter('Todos')
     setBrandFilter('Todas')
@@ -267,21 +274,15 @@ export default function FraicheFinder() {
 
             {user ? (
               <div className="flex items-center gap-3">
-                <span className="text-sm text-zinc-600 flex items-center gap-1">
-                  <User size={16} /> {user.email?.split('@')[0]}
-                </span>
+                <span className="text-sm text-zinc-600 flex items-center gap-1"><User size={16} /> {user.email?.split('@')[0]}</span>
                 <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-300 hover:bg-zinc-50 text-sm">
                   <LogOut size={16} /> Salir
                 </button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <a href="/login" className="px-4 py-2 rounded-xl border border-zinc-300 hover:bg-zinc-50 text-sm flex items-center gap-2">
-                  <LogIn size={16} /> Iniciar sesión
-                </a>
-                <a href="/signup" className="px-4 py-2 rounded-xl bg-[#20cbd4] text-white text-sm font-medium">
-                  Registrarse
-                </a>
+                <a href="/login" className="px-4 py-2 rounded-xl border border-zinc-300 hover:bg-zinc-50 text-sm flex items-center gap-2"><LogIn size={16} /> Iniciar sesión</a>
+                <a href="/signup" className="px-4 py-2 rounded-xl bg-[#20cbd4] text-white text-sm font-medium">Registrarse</a>
               </div>
             )}
           </div>
@@ -296,30 +297,21 @@ export default function FraicheFinder() {
 
       {/* Buscador + Filtros */}
       <div className="max-w-5xl mx-auto px-6 sticky top-0 bg-white z-50 pb-6 border-b border-zinc-100">
-
-        {/* Buscador */}
         <div className="flex gap-3 mb-3">
           <div className="relative flex-1">
             <Search className="absolute left-5 top-4 text-zinc-400" size={20} />
             <input type="text" placeholder="Busca un perfume..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-white border border-zinc-300 rounded-3xl pl-12 pr-6 py-4 text-lg focus:border-[#20cbd4] outline-none" />
           </div>
-
           <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-6 py-4 rounded-3xl bg-[#20cbd4] hover:bg-[#1bb8c2] text-white font-semibold">
             <Plus size={20} /> Sugerir
           </button>
         </div>
 
-        {/* Dropdowns de Filtros */}
+        {/* Dropdowns */}
         <div className="flex flex-col sm:flex-row gap-3">
-
-          {/* Género */}
           <div className="flex-1">
             <label className="block text-xs text-zinc-500 mb-1 ml-1">Género</label>
-            <select
-              value={genderFilter}
-              onChange={(e) => setGenderFilter(e.target.value as GenderFilter)}
-              className="w-full bg-white border border-zinc-300 rounded-2xl px-4 py-3 text-sm focus:border-[#20cbd4] outline-none"
-            >
+            <select value={genderFilter} onChange={(e) => setGenderFilter(e.target.value as GenderFilter)} className="w-full bg-white border border-zinc-300 rounded-2xl px-4 py-3 text-sm focus:border-[#20cbd4] outline-none">
               <option value="Todos">Todos</option>
               <option value="Dama">Dama</option>
               <option value="Caballero">Caballero</option>
@@ -327,27 +319,16 @@ export default function FraicheFinder() {
             </select>
           </div>
 
-          {/* Marca */}
           <div className="flex-1">
             <label className="block text-xs text-zinc-500 mb-1 ml-1">Marca</label>
-            <select
-              value={brandFilter}
-              onChange={(e) => setBrandFilter(e.target.value)}
-              className="w-full bg-white border border-zinc-300 rounded-2xl px-4 py-3 text-sm focus:border-[#20cbd4] outline-none"
-            >
+            <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="w-full bg-white border border-zinc-300 rounded-2xl px-4 py-3 text-sm focus:border-[#20cbd4] outline-none">
               <option value="Todas">Todas las marcas</option>
-              {uniqueBrands.map((brand) => (
-                <option key={brand} value={brand}>{brand}</option>
-              ))}
+              {uniqueBrands.map(brand => <option key={brand} value={brand}>{brand}</option>)}
             </select>
           </div>
 
-          {/* Botón Limpiar Filtros */}
           {(genderFilter !== 'Todos' || brandFilter !== 'Todas') && (
-            <button
-              onClick={clearFilters}
-              className="px-5 h-[50px] mt-auto rounded-2xl border border-zinc-300 text-sm font-medium hover:bg-zinc-50 transition-colors whitespace-nowrap self-end"
-            >
+            <button onClick={clearFilters} className="px-5 h-[50px] mt-auto rounded-2xl border border-zinc-300 text-sm font-medium hover:bg-zinc-50 transition-colors whitespace-nowrap self-end">
               Limpiar filtros
             </button>
           )}
@@ -355,19 +336,17 @@ export default function FraicheFinder() {
 
         {/* Leyenda */}
         {!isPending && displayedResults.length > 0 && (
-          <div className="mt-3 ml-1">
-            {searchTerm.length > 0 ? (
-              <p className="text-sm text-zinc-500">Se encontraron <span className="font-semibold">{displayedResults.length}</span> resultados</p>
-            ) : (
-              <p className="text-sm text-zinc-500">Mostrando <span className="font-semibold">{displayedResults.length}</span> de <span className="font-semibold">{totalFragrances}</span> fragancias</p>
-            )}
+          <div className="mt-3 ml-1 text-sm text-zinc-500">
+            {searchTerm.length > 0 
+              ? `Se encontraron ${filteredResults.length} resultados` 
+              : `Mostrando ${displayedResults.length} de ${totalFragrances} fragancias`}
           </div>
         )}
       </div>
 
       {/* Resultados */}
       <div className="max-w-5xl mx-auto px-6 pb-20 pt-4">
-        {isPending ? (
+        {(isPending || (searchTerm.length > 0 && searchData.length === 0 && searchTerm.length > 1)) ? (
           <div className="text-center py-16 text-zinc-500">Cargando...</div>
         ) : displayedResults.length === 0 ? (
           <div className="text-center py-16"><p className="text-2xl text-zinc-500">No se encontraron resultados</p></div>
@@ -396,16 +375,11 @@ export default function FraicheFinder() {
                         <div className="text-xs text-zinc-500">CÓDIGO FRAICHE</div>
                         <div className="font-mono text-4xl font-bold text-[#20cbd4] tracking-tight">{item.fraiche_code}</div>
                       </div>
-
                       <div className="flex flex-col gap-2">
                         <button onClick={() => copyCode(item.fraiche_code)} className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white border border-zinc-300 hover:bg-zinc-100 text-sm">
                           <Copy size={15} /> Copiar
                         </button>
-                        {item.link && (
-                          <a href={item.link} target="_blank" className="flex items-center justify-center px-4 py-2 rounded-xl bg-white border border-zinc-300 hover:bg-zinc-100 text-sm">
-                            Ver en Fraiche
-                          </a>
-                        )}
+                        {item.link && <a href={item.link} target="_blank" className="flex items-center justify-center px-4 py-2 rounded-xl bg-white border border-zinc-300 hover:bg-zinc-100 text-sm">Ver en Fraiche</a>}
                       </div>
                     </div>
 
@@ -427,7 +401,20 @@ export default function FraicheFinder() {
               })}
             </div>
 
-            {/* Sentinel para Infinite Scroll */}
+            {/* Paginación (solo cuando hay búsqueda) */}
+            {searchTerm.length > 0 && totalPages > 1 && (
+              <div className="flex justify-center items-center gap-4 mt-8">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-300 disabled:opacity-50">
+                  <ChevronLeft size={18} /> Anterior
+                </button>
+                <span className="text-sm text-zinc-600">Página {currentPage} de {totalPages}</span>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-300 disabled:opacity-50">
+                  Siguiente <ChevronRight size={18} />
+                </button>
+              </div>
+            )}
+
+            {/* Infinite Scroll */}
             {searchTerm.length === 0 && hasNextPage && (
               <div ref={loadMoreRef} className="h-10 flex justify-center items-center mt-8">
                 {isFetchingNextPage && <p className="text-zinc-500">Cargando más fragancias...</p>}

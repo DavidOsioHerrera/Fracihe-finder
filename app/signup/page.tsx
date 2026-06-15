@@ -27,15 +27,15 @@ export default function SignupPage() {
         return
       }
 
-      const { error } = await supabase.auth.signUp({
-        email,
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
         password,
       })
 
       if (error) {
         toast.error(error.message)
       } else {
-        toast.success('Cuenta creada. Revisa tu correo para confirmar.')
+        toast.success('Cuenta creada correctamente. Revisa tu correo para confirmar tu email.')
         router.push('/login')
       }
     } catch (error: any) {
@@ -51,7 +51,7 @@ export default function SignupPage() {
 
       {/* Header con Logo */}
       <header className="border-b border-zinc-200">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 py-5">
           <a href="/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#20cbd4] rounded-2xl flex items-center justify-center">
               <span className="font-bold text-2xl text-white">F</span>
@@ -64,32 +64,32 @@ export default function SignupPage() {
         </div>
       </header>
 
-      <div className="flex items-center justify-center min-h-[calc(100vh-73px)]">
-        <div className="w-full max-w-md px-6">
+      <div className="flex items-center justify-center min-h-[calc(100vh-73px)] px-6">
+        <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-zinc-600">Crear Cuenta</h1>
-            <p className="text-zinc-600 mt-2">Regístrate para poder votar</p>
+            <p className="text-zinc-600 mt-2">Regístrate para poder votar en los rankings</p>
           </div>
 
-          <form onSubmit={handleSignup} className="space-y-6">
+          <form onSubmit={handleSignup} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium mb-2 text-zinc-600">Email</label>
+              <label className="block text-sm font-medium mb-1.5 text-zinc-600">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-zinc-500 rounded-2xl px-5 py-3 focus:border-[#20cbd4] outline-none"
+                className="w-full border border-zinc-300 rounded-2xl px-5 py-3 focus:border-[#20cbd4] outline-none text-zinc-600"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2 text-zinc-600">Contraseña</label>
+              <label className="block text-sm font-medium mb-1.5 text-zinc-600">Contraseña</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-zinc-500 rounded-2xl px-5 py-3 focus:border-[#20cbd4] outline-none"
+                className="w-full border border-zinc-300 rounded-2xl px-5 py-3 focus:border-[#20cbd4] outline-none text-zinc-600"
                 required
               />
             </div>

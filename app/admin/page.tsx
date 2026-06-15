@@ -85,9 +85,10 @@ export default function AdminPanel() {
   }
 
   const filteredMappings = mappings.filter(item =>
-    item.original_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.fraiche_code.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+	  item.original_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+	  item.fraiche_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+	  (item.brand && item.brand.toLowerCase().includes(searchTerm.toLowerCase()))
+	)
 
   // Crear nueva fragancia con chequeo inteligente de duplicados
   const createNewItem = async () => {
@@ -241,47 +242,62 @@ export default function AdminPanel() {
         </div>
 
         {/* Tabla */}
-        <div className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-zinc-50">
-              <tr>
-                <th className="text-left p-5">Perfume</th>
-                <th className="text-left p-5">Código Fraiche</th>
-                <th className="text-left p-5">Género</th>
-                <th className="text-left p-5">Costo/g</th>
-                <th className="text-center p-5">Likes</th>
-                <th className="text-center p-5">Dislikes</th>
-                <th className="text-center p-5">Estado</th>
-                <th className="text-right p-5 pr-8">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredMappings.map(item => (
-                <tr key={item.id} className="border-t border-zinc-100">
-                  <td className="p-5 font-medium">{item.original_name}</td>
-                  <td className="p-5 font-mono text-[#20cbd4]">{item.fraiche_code}</td>
-                  <td className="p-5 text-sm">{item.gender}</td>
-                  <td className="p-5 text-sm">{item.cost_per_gram ? `$${item.cost_per_gram}` : '-'}</td>
-                  <td className="p-5 text-center text-green-600 font-medium">{item.likes || 0}</td>
-                  <td className="p-5 text-center text-red-600 font-medium">{item.dislikes || 0}</td>
-                  <td className="p-5 text-center">
-                    {item.is_verified 
-                      ? <span className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-full">Verificado</span>
-                      : <span className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">Pendiente</span>
-                    }
-                  </td>
-                  <td className="p-5 text-right pr-6">
-                    <div className="flex justify-end gap-2">
-                      {!item.is_verified && <button onClick={() => verifyMapping(item.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-xl"><Check size={18}/></button>}
-                      <button onClick={() => setEditingItem(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl"><Edit2 size={18}/></button>
-                      <button onClick={() => deleteMapping(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl"><Trash2 size={18}/></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+			<div className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
+			  <table className="w-full">
+				<thead className="bg-zinc-50">
+				  <tr>
+					<th className="text-left p-5">Perfume</th>
+					<th className="text-left p-5">Marca</th> {/* ← Nueva columna */}
+					<th className="text-left p-5">Código Fraiche</th>
+					<th className="text-left p-5">Género</th>
+					<th className="text-left p-5">Costo/g</th>
+					<th className="text-center p-5">Likes</th>
+					<th className="text-center p-5">Dislikes</th>
+					<th className="text-center p-5">Estado</th>
+					<th className="text-right p-5 pr-8">Acciones</th>
+				  </tr>
+				</thead>
+				<tbody>
+				  {filteredMappings.map(item => (
+					<tr key={item.id} className="border-t border-zinc-100">
+					  <td className="p-5 font-medium">{item.original_name}</td>
+					  
+					  {/* Nueva columna de Marca */}
+					  <td className="p-5 text-sm text-zinc-600">
+						{item.brand || <span className="text-zinc-400 italic">—</span>}
+					  </td>
+
+					  <td className="p-5 font-mono text-[#20cbd4]">{item.fraiche_code}</td>
+					  <td className="p-5 text-sm">{item.gender}</td>
+					  <td className="p-5 text-sm">{item.cost_per_gram ? `$${item.cost_per_gram}` : '-'}</td>
+					  <td className="p-5 text-center text-green-600 font-medium">{item.likes || 0}</td>
+					  <td className="p-5 text-center text-red-600 font-medium">{item.dislikes || 0}</td>
+					  <td className="p-5 text-center">
+						{item.is_verified 
+						  ? <span className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-full">Verificado</span>
+						  : <span className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">Pendiente</span>
+						}
+					  </td>
+					  <td className="p-5 text-right pr-6">
+						<div className="flex justify-end gap-2">
+						  {!item.is_verified && (
+							<button onClick={() => verifyMapping(item.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-xl">
+							  <Check size={18}/>
+							</button>
+						  )}
+						  <button onClick={() => setEditingItem(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl">
+							<Edit2 size={18}/>
+						  </button>
+						  <button onClick={() => deleteMapping(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl">
+							<Trash2 size={18}/>
+						  </button>
+						</div>
+					  </td>
+					</tr>
+				  ))}
+				</tbody>
+			  </table>
+			</div>
       </div>
 
       {/* Modal Crear */}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Fuse from 'fuse.js'
-import { Search, Copy, Plus, Filter, ThumbsUp, ThumbsDown, LogIn, LogOut, User } from 'lucide-react'
+import { Search, Copy, Plus, ThumbsUp, ThumbsDown, LogIn, LogOut, User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { PerfumeMapping } from '@/types'
 import { Toaster, toast } from 'sonner'
@@ -15,7 +15,7 @@ export default function FraicheFinder() {
   const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [genderFilter, setGenderFilter] = useState<GenderFilter>('Todos')
-  const [showFilterMenu, setShowFilterMenu] = useState(false)
+  const [brandFilter, setBrandFilter] = useState<string>('Todas')
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -58,7 +58,7 @@ export default function FraicheFinder() {
 
       return { data: data || [], count: count || 0 }
     },
-	initialPageParam: 0,
+    initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
       const loaded = allPages.reduce((acc, page) => acc + page.data.length, 0)
       return loaded < lastPage.count ? allPages.length : undefined
@@ -69,7 +69,12 @@ export default function FraicheFinder() {
   const allFragrances = infiniteData?.pages.flatMap(page => page.data) || []
   const totalFragrances = infiniteData?.pages[0]?.count || 0
 
-  // === User Votes Query ===
+  // Marcas únicas
+  const uniqueBrands = Array.from(
+    new Set(allFragrances.map(item => item.brand).filter(Boolean))
+  ).sort()
+
+  // === User Votes ===
   const { data: userVotes = {} } = useQuery({
     queryKey: ['userVotes', user?.id],
     queryFn: async () => {
@@ -79,27 +84,35 @@ export default function FraicheFinder() {
         .select('fragrance_id, vote_type')
         .eq('user_id', user.id)
 
-      const votesMap: Record<string, 'like' | 'dislike'> = {}
-      data?.forEach(v => {
-        votesMap[v.fragrance_id] = v.vote_type as 'like' | 'dislike'
-      })
-      return votesMap
+      const map: Record<string, 'like' | 'dislike'> = {}
+      data?.forEach(v => { map[v.fragrance_id] = v.vote_type })
+      return map
     },
     enabled: !!user,
   })
 
-  // Si hay búsqueda → mostrar todos los resultados
-  const displayedResults = searchTerm.length > 0 
-    ? (() => {
-        let filtered = allFragrances.length > 0 ? allFragrances : []
-        if (genderFilter !== 'Todos') filtered = filtered.filter(m => m.gender === genderFilter)
-        if (searchTerm) {
-          const fuse = new Fuse(filtered, { keys: ['original_name', 'brand'], threshold: 0.35 })
-          filtered = fuse.search(searchTerm).map(r => r.item)
-        }
-        return filtered
-      })()
-    : allFragrances
+  // === Filtrado combinado ===
+  const displayedResults = (() => {
+    let results = searchTerm.length > 0 ? allFragrances : allFragrances
+
+    if (genderFilter !== 'Todos') {
+      results = results.filter(m => m.gender === genderFilter)
+    }
+
+    if (brandFilter !== 'Todas') {
+      results = results.filter(m => m.brand === brandFilter)
+    }
+
+    if (searchTerm) {
+      const fuse = new Fuse(results, {
+        keys: ['original_name', 'brand', 'fraiche_code'],
+        threshold: 0.35,
+      })
+      results = fuse.search(searchTerm).map(r => r.item)
+    }
+
+    return results
+  })()
 
   // === Infinite Scroll ===
   useEffect(() => {
@@ -219,6 +232,12 @@ export default function FraicheFinder() {
     toast.info('Sesión cerrada')
   }
 
+  // Función para limpiar filtros
+  const clearFilters = () => {
+    setGenderFilter('Todos')
+    setBrandFilter('Todas')
+  }
+
   return (
     <div className="min-h-screen bg-white text-zinc-900">
       <Toaster position="top-center" richColors />
@@ -276,78 +295,82 @@ export default function FraicheFinder() {
       </div>
 
       {/* Buscador + Filtros */}
-		<div className="max-w-5xl mx-auto px-6 sticky top-0 bg-white z-50 pb-6 border-b border-zinc-100">
-		  
-		  {/* Buscador */}
-		  <div className="flex gap-3 mb-3">
-			<div className="relative flex-1">
-			  <Search className="absolute left-5 top-4 text-zinc-400" size={20} />
-			  <input
-				type="text"
-				placeholder="Busca un perfume..."
-				value={searchTerm}
-				onChange={(e) => setSearchTerm(e.target.value)}
-				className="w-full bg-white border border-zinc-300 rounded-3xl pl-12 pr-6 py-4 text-lg focus:border-[#20cbd4] outline-none"
-			  />
-			</div>
+      <div className="max-w-5xl mx-auto px-6 sticky top-0 bg-white z-50 pb-6 border-b border-zinc-100">
 
-			<div className="relative">
-			  <button 
-				onClick={() => setShowFilterMenu(!showFilterMenu)} 
-				className="flex items-center gap-2 px-5 py-4 rounded-3xl border border-zinc-300 hover:bg-zinc-50"
-			  >
-				<Filter size={18} /> Filtros
-			  </button>
+        {/* Buscador */}
+        <div className="flex gap-3 mb-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-5 top-4 text-zinc-400" size={20} />
+            <input type="text" placeholder="Busca un perfume..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-white border border-zinc-300 rounded-3xl pl-12 pr-6 py-4 text-lg focus:border-[#20cbd4] outline-none" />
+          </div>
 
-			  {showFilterMenu && (
-				<div className="absolute right-0 mt-2 w-48 bg-white border border-zinc-200 rounded-2xl shadow-lg py-2 z-50">
-				  {(['Todos', 'Dama', 'Caballero', 'Unisex'] as const).map((g) => (
-					<button 
-					  key={g} 
-					  onClick={() => { setGenderFilter(g); setShowFilterMenu(false) }} 
-					  className={`w-full text-left px-5 py-2.5 text-sm hover:bg-zinc-50 ${genderFilter === g ? 'bg-zinc-100 font-medium' : ''}`}
-					>
-					  {g}
-					</button>
-				  ))}
-				</div>
-			  )}
-			</div>
+          <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-6 py-4 rounded-3xl bg-[#20cbd4] hover:bg-[#1bb8c2] text-white font-semibold">
+            <Plus size={20} /> Sugerir
+          </button>
+        </div>
 
-			<button 
-			  onClick={() => setShowModal(true)} 
-			  className="flex items-center gap-2 px-6 py-4 rounded-3xl bg-[#20cbd4] hover:bg-[#1bb8c2] text-white font-semibold"
-			>
-			  <Plus size={20} /> Sugerir
-			</button>
-		  </div>
+        {/* Dropdowns de Filtros */}
+        <div className="flex flex-col sm:flex-row gap-3">
 
-		  {/* Leyenda de cantidad de fragancias (justo debajo del buscador) */}
-		  {!isPending && displayedResults.length > 0 && (
-			<div className="ml-1">
-			  {searchTerm.length > 0 ? (
-				<p className="text-sm text-zinc-500">
-				  Se encontraron <span className="font-semibold text-zinc-700">{displayedResults.length}</span> resultados
-				</p>
-			  ) : (
-				<p className="text-sm text-zinc-500">
-				  Mostrando <span className="font-semibold text-zinc-700">{displayedResults.length}</span> de{' '}
-				  <span className="font-semibold text-zinc-700">{totalFragrances}</span> fragancias
-				</p>
-			  )}
-			</div>
-		  )}
+          {/* Género */}
+          <div className="flex-1">
+            <label className="block text-xs text-zinc-500 mb-1 ml-1">Género</label>
+            <select
+              value={genderFilter}
+              onChange={(e) => setGenderFilter(e.target.value as GenderFilter)}
+              className="w-full bg-white border border-zinc-300 rounded-2xl px-4 py-3 text-sm focus:border-[#20cbd4] outline-none"
+            >
+              <option value="Todos">Todos</option>
+              <option value="Dama">Dama</option>
+              <option value="Caballero">Caballero</option>
+              <option value="Unisex">Unisex</option>
+            </select>
+          </div>
 
-		</div>
+          {/* Marca */}
+          <div className="flex-1">
+            <label className="block text-xs text-zinc-500 mb-1 ml-1">Marca</label>
+            <select
+              value={brandFilter}
+              onChange={(e) => setBrandFilter(e.target.value)}
+              className="w-full bg-white border border-zinc-300 rounded-2xl px-4 py-3 text-sm focus:border-[#20cbd4] outline-none"
+            >
+              <option value="Todas">Todas las marcas</option>
+              {uniqueBrands.map((brand) => (
+                <option key={brand} value={brand}>{brand}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Botón Limpiar Filtros */}
+          {(genderFilter !== 'Todos' || brandFilter !== 'Todas') && (
+            <button
+              onClick={clearFilters}
+              className="px-5 h-[50px] mt-auto rounded-2xl border border-zinc-300 text-sm font-medium hover:bg-zinc-50 transition-colors whitespace-nowrap self-end"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+
+        {/* Leyenda */}
+        {!isPending && displayedResults.length > 0 && (
+          <div className="mt-3 ml-1">
+            {searchTerm.length > 0 ? (
+              <p className="text-sm text-zinc-500">Se encontraron <span className="font-semibold">{displayedResults.length}</span> resultados</p>
+            ) : (
+              <p className="text-sm text-zinc-500">Mostrando <span className="font-semibold">{displayedResults.length}</span> de <span className="font-semibold">{totalFragrances}</span> fragancias</p>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Resultados */}
       <div className="max-w-5xl mx-auto px-6 pb-20 pt-4">
         {isPending ? (
           <div className="text-center py-16 text-zinc-500">Cargando...</div>
         ) : displayedResults.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-2xl text-zinc-500">No se encontraron resultados</p>
-          </div>
+          <div className="text-center py-16"><p className="text-2xl text-zinc-500">No se encontraron resultados</p></div>
         ) : (
           <>
             <div className="grid md:grid-cols-2 gap-4">
@@ -388,18 +411,10 @@ export default function FraicheFinder() {
 
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => voteMutation.mutate({ fragranceId: item.id, voteType: 'like' })}
-                          disabled={!user}
-                          className={`flex items-center gap-1.5 text-sm transition-colors ${userVote === 'like' ? 'text-green-600 font-semibold' : 'hover:text-green-600'} ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
+                        <button onClick={() => voteMutation.mutate({ fragranceId: item.id, voteType: 'like' })} disabled={!user} className={`flex items-center gap-1.5 text-sm transition-colors ${userVote === 'like' ? 'text-green-600 font-semibold' : 'hover:text-green-600'} ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}>
                           <ThumbsUp size={18} /> <span>{item.likes || 0}</span>
                         </button>
-                        <button
-                          onClick={() => voteMutation.mutate({ fragranceId: item.id, voteType: 'dislike' })}
-                          disabled={!user}
-                          className={`flex items-center gap-1.5 text-sm transition-colors ${userVote === 'dislike' ? 'text-red-600 font-semibold' : 'hover:text-red-600'} ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
+                        <button onClick={() => voteMutation.mutate({ fragranceId: item.id, voteType: 'dislike' })} disabled={!user} className={`flex items-center gap-1.5 text-sm transition-colors ${userVote === 'dislike' ? 'text-red-600 font-semibold' : 'hover:text-red-600'} ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}>
                           <ThumbsDown size={18} /> <span>{item.dislikes || 0}</span>
                         </button>
                       </div>

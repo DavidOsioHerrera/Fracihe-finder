@@ -30,7 +30,7 @@ function checkRateLimit(userId: string, limit = 10, windowMs = 60000): boolean {
 // =====================================================
 export async function voteOnFragrance(fragranceId: string, voteType: 'like' | 'dislike') {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
 
     // 1. Verificar que el usuario esté autenticado
     const { data: { user }, error: authError } = await supabase.auth.getUser()

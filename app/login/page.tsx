@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { Toaster, toast } from 'sonner'
-import { authRatelimit } from '@/lib/rate-limit'
 
 export default function LoginPage() {
   const supabase = createClient()
@@ -17,30 +16,21 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
 
-    try {
-      // Rate Limiting: máximo 5 intentos cada 5 minutos por email
-      const { success } = await authRatelimit.limit(`login:${email.toLowerCase()}`)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
 
-      if (!success) {
-        toast.error('Demasiados intentos fallidos. Espera unos minutos.')
-        setLoading(false)
-        return
-      }
+    if (error) {
+      toast.error(error.message)
+      setLoading(false)
+      return
+    }
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) {
-        toast.error(error.message)
-      } else {
-        toast.success('Inicio de sesión exitoso')
-        router.push('/')
-        router.refresh()
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Error al iniciar sesión')
+    if (data?.user) {
+      toast.success('Inicio de sesión exitoso')
+      router.push('/')
+      router.refresh()
     }
 
     setLoading(false)
@@ -50,9 +40,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-white">
       <Toaster position="top-center" richColors />
 
-      {/* Header con Logo */}
       <header className="border-b border-zinc-200">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 py-5">
           <a href="/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#20cbd4] rounded-2xl flex items-center justify-center">
               <span className="font-bold text-2xl text-white">F</span>
@@ -65,32 +54,30 @@ export default function LoginPage() {
         </div>
       </header>
 
-      <div className="flex items-center justify-center min-h-[calc(100vh-73px)]">
-        <div className="w-full max-w-md px-6">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-zinc-600">Iniciar Sesión</h1>
-            <p className="text-zinc-600 mt-2">Accede a tu cuenta para votar</p>
-          </div>
+      <div className="flex items-center justify-center min-h-[calc(100vh-73px)] px-6">
+        <div className="w-full max-w-md">
+          <h1 className="text-3xl font-bold text-center mb-2 text-zinc-600">Iniciar Sesión</h1>
+          <p className="text-center text-zinc-600 mb-8">Accede para votar en los rankings</p>
 
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium mb-2 text-zinc-600">Email</label>
+              <label className="block text-sm font-medium mb-1.5 text-zinc-600">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-zinc-500 rounded-2xl px-5 py-3 focus:border-[#20cbd4] outline-none"
+                className="w-full border border-zinc-300 rounded-2xl px-5 py-3 focus:border-[#20cbd4] outline-none text-zinc-600"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2 text-zinc-600">Contraseña</label>
+              <label className="block text-sm font-medium mb-1.5 text-zinc-600">Contraseña</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-zinc-500 rounded-2xl px-5 py-3 focus:border-[#20cbd4] outline-none"
+                className="w-full border border-zinc-300 rounded-2xl px-5 py-3 focus:border-[#20cbd4] outline-none text-zinc-600"
                 required
               />
             </div>
@@ -98,7 +85,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 rounded-2xl bg-[#20cbd4] hover:bg-[#1bb8c2] text-white font-semibold disabled:opacity-70 transition-colors"
+              className="w-full py-3.5 rounded-2xl bg-[#20cbd4] text-white font-semibold disabled:opacity-70 hover:bg-[#1bb8c2] transition-colors"
             >
               {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </button>

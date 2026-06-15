@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { PerfumeMapping } from '@/types'
 import { Toaster, toast } from 'sonner'
-import { Check, Trash2, Edit2, LogOut, Home, Plus, X } from 'lucide-react'
+import { Check, Trash2, Edit2, LogOut, Home, Plus, X, Copy } from 'lucide-react'
 
 export default function AdminPanel() {
   const [mappings, setMappings] = useState<PerfumeMapping[]>([])
@@ -27,7 +27,7 @@ export default function AdminPanel() {
 
   const router = useRouter()
 
-  // Función para normalizar texto (quitar acentos y pasar a minúsculas)
+  // Normalizar texto (para chequeo de duplicados inteligente)
   const normalizeText = (text: string) => {
     return text
       .toLowerCase()
@@ -85,71 +85,62 @@ export default function AdminPanel() {
   }
 
   const filteredMappings = mappings.filter(item =>
-	  item.original_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-	  item.fraiche_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-	  (item.brand && item.brand.toLowerCase().includes(searchTerm.toLowerCase()))
-	)
+    item.original_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.fraiche_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.brand && item.brand.toLowerCase().includes(searchTerm.toLowerCase()))
+  )
 
   // Crear nueva fragancia con chequeo inteligente de duplicados
   const createNewItem = async () => {
-	  if (!newItem.original_name || !newItem.fraiche_code) {
-		toast.error('Nombre y código Fraiche son obligatorios')
-		return
-	  }
+    if (!newItem.original_name || !newItem.fraiche_code) {
+      toast.error('Nombre y código Fraiche son obligatorios')
+      return
+    }
 
-	  const normalizedNewName = normalizeText(newItem.original_name)
-	  const normalizedNewCode = normalizeText(newItem.fraiche_code)
+    const normalizedNewName = normalizeText(newItem.original_name)
+    const normalizedNewCode = normalizeText(newItem.fraiche_code)
 
-	  // Traer TODAS las fragancias para hacer el chequeo (más confiable)
-	  const { data: existing, error } = await supabase
-		.from('perfume_mappings')
-		.select('id, original_name, fraiche_code')
+    const { data: existing } = await supabase
+      .from('perfume_mappings')
+      .select('id, original_name, fraiche_code')
 
-	  if (error) {
-		toast.error('Error al verificar duplicados')
-		return
-	  }
+    const duplicates = (existing || []).filter(item => {
+      const itemName = normalizeText(item.original_name)
+      const itemCode = normalizeText(item.fraiche_code)
+      return itemName === normalizedNewName || itemCode === normalizedNewCode
+    })
 
-	  // Chequeo inteligente de duplicados (ignora mayúsculas y acentos)
-	  const duplicates = (existing || []).filter(item => {
-		const itemName = normalizeText(item.original_name)
-		const itemCode = normalizeText(item.fraiche_code)
+    if (duplicates.length > 0) {
+      const confirmMessage = duplicates
+        .map(d => `• ${d.original_name} (${d.fraiche_code})`)
+        .join('\n')
 
-		return itemName === normalizedNewName || itemCode === normalizedNewCode
-	  })
+      const confirmAdd = window.confirm(
+        `Ya existe una fragancia similar:\n\n${confirmMessage}\n\n¿Deseas agregarla de todas formas?`
+      )
 
-	  if (duplicates.length > 0) {
-		const confirmMessage = duplicates
-		  .map(d => `• ${d.original_name} (${d.fraiche_code})`)
-		  .join('\n')
+      if (!confirmAdd) return
+    }
 
-		const confirmAdd = window.confirm(
-		  `Ya existe una fragancia similar:\n\n${confirmMessage}\n\n¿Deseas agregarla de todas formas?`
-		)
+    const { error } = await supabase.from('perfume_mappings').insert({
+      original_name: newItem.original_name,
+      brand: newItem.brand || null,
+      fraiche_code: newItem.fraiche_code,
+      gender: newItem.gender,
+      cost_per_gram: newItem.cost_per_gram ? parseFloat(newItem.cost_per_gram) : null,
+      link: newItem.link || null,
+      is_verified: true,
+    })
 
-		if (!confirmAdd) return
-	  }
-
-	  // Insertar si pasó la validación
-	  const { error: insertError } = await supabase.from('perfume_mappings').insert({
-		original_name: newItem.original_name,
-		brand: newItem.brand || null,
-		fraiche_code: newItem.fraiche_code,
-		gender: newItem.gender,
-		cost_per_gram: newItem.cost_per_gram ? parseFloat(newItem.cost_per_gram) : null,
-		link: newItem.link || null,
-		is_verified: true,
-	  })
-
-	  if (insertError) {
-		toast.error('Error al crear la entrada')
-	  } else {
-		toast.success('Fragancia agregada correctamente')
-		setShowCreateModal(false)
-		setNewItem({ original_name: '', brand: '', fraiche_code: '', gender: 'Caballero', cost_per_gram: '', link: '' })
-		fetchMappings(sortBy)
-	  }
-	}
+    if (error) {
+      toast.error('Error al crear la entrada')
+    } else {
+      toast.success('Fragancia agregada correctamente')
+      setShowCreateModal(false)
+      setNewItem({ original_name: '', brand: '', fraiche_code: '', gender: 'Caballero', cost_per_gram: '', link: '' })
+      fetchMappings(sortBy)
+    }
+  }
 
   const verifyMapping = async (id: string) => {
     await supabase.from('perfume_mappings').update({ is_verified: true }).eq('id', id)
@@ -231,7 +222,7 @@ export default function AdminPanel() {
         <div className="flex justify-between items-center mb-6">
           <input
             type="text"
-            placeholder="Buscar fragancia..."
+            placeholder="Buscar por nombre, marca o código Fraiche..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full max-w-md border border-zinc-300 rounded-2xl px-5 py-3"
@@ -242,62 +233,49 @@ export default function AdminPanel() {
         </div>
 
         {/* Tabla */}
-			<div className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
-			  <table className="w-full">
-				<thead className="bg-zinc-50">
-				  <tr>
-					<th className="text-left p-5">Perfume</th>
-					<th className="text-left p-5">Marca</th> {/* ← Nueva columna */}
-					<th className="text-left p-5">Código Fraiche</th>
-					<th className="text-left p-5">Género</th>
-					<th className="text-left p-5">Costo/g</th>
-					<th className="text-center p-5">Likes</th>
-					<th className="text-center p-5">Dislikes</th>
-					<th className="text-center p-5">Estado</th>
-					<th className="text-right p-5 pr-8">Acciones</th>
-				  </tr>
-				</thead>
-				<tbody>
-				  {filteredMappings.map(item => (
-					<tr key={item.id} className="border-t border-zinc-100">
-					  <td className="p-5 font-medium">{item.original_name}</td>
-					  
-					  {/* Nueva columna de Marca */}
-					  <td className="p-5 text-sm text-zinc-600">
-						{item.brand || <span className="text-zinc-400 italic">—</span>}
-					  </td>
-
-					  <td className="p-5 font-mono text-[#20cbd4]">{item.fraiche_code}</td>
-					  <td className="p-5 text-sm">{item.gender}</td>
-					  <td className="p-5 text-sm">{item.cost_per_gram ? `$${item.cost_per_gram}` : '-'}</td>
-					  <td className="p-5 text-center text-green-600 font-medium">{item.likes || 0}</td>
-					  <td className="p-5 text-center text-red-600 font-medium">{item.dislikes || 0}</td>
-					  <td className="p-5 text-center">
-						{item.is_verified 
-						  ? <span className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-full">Verificado</span>
-						  : <span className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">Pendiente</span>
-						}
-					  </td>
-					  <td className="p-5 text-right pr-6">
-						<div className="flex justify-end gap-2">
-						  {!item.is_verified && (
-							<button onClick={() => verifyMapping(item.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-xl">
-							  <Check size={18}/>
-							</button>
-						  )}
-						  <button onClick={() => setEditingItem(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl">
-							<Edit2 size={18}/>
-						  </button>
-						  <button onClick={() => deleteMapping(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl">
-							<Trash2 size={18}/>
-						  </button>
-						</div>
-					  </td>
-					</tr>
-				  ))}
-				</tbody>
-			  </table>
-			</div>
+        <div className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-zinc-50">
+              <tr>
+                <th className="text-left p-5">Perfume</th>
+                <th className="text-left p-5">Marca</th>
+                <th className="text-left p-5">Código Fraiche</th>
+                <th className="text-left p-5">Género</th>
+                <th className="text-left p-5">Costo/g</th>
+                <th className="text-center p-5">Likes</th>
+                <th className="text-center p-5">Dislikes</th>
+                <th className="text-center p-5">Estado</th>
+                <th className="text-right p-5 pr-8">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredMappings.map(item => (
+                <tr key={item.id} className="border-t border-zinc-100">
+                  <td className="p-5 font-medium">{item.original_name}</td>
+                  <td className="p-5 text-sm text-zinc-600">{item.brand || <span className="text-zinc-400 italic">—</span>}</td>
+                  <td className="p-5 font-mono text-[#20cbd4]">{item.fraiche_code}</td>
+                  <td className="p-5 text-sm">{item.gender}</td>
+                  <td className="p-5 text-sm">{item.cost_per_gram ? `$${item.cost_per_gram}` : '-'}</td>
+                  <td className="p-5 text-center text-green-600 font-medium">{item.likes || 0}</td>
+                  <td className="p-5 text-center text-red-600 font-medium">{item.dislikes || 0}</td>
+                  <td className="p-5 text-center">
+                    {item.is_verified 
+                      ? <span className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-full">Verificado</span>
+                      : <span className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">Pendiente</span>
+                    }
+                  </td>
+                  <td className="p-5 text-right pr-6">
+                    <div className="flex justify-end gap-2">
+                      {!item.is_verified && <button onClick={() => verifyMapping(item.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-xl"><Check size={18}/></button>}
+                      <button onClick={() => setEditingItem(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl"><Edit2 size={18}/></button>
+                      <button onClick={() => deleteMapping(item.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-xl"><Trash2 size={18}/></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Modal Crear */}
@@ -309,7 +287,30 @@ export default function AdminPanel() {
             <div className="space-y-4">
               <input placeholder="Nombre del perfume *" value={newItem.original_name} onChange={e => setNewItem({...newItem, original_name: e.target.value})} className="w-full border border-zinc-300 rounded-2xl px-5 py-3" />
               <input placeholder="Marca" value={newItem.brand} onChange={e => setNewItem({...newItem, brand: e.target.value})} className="w-full border border-zinc-300 rounded-2xl px-5 py-3" />
-              <input placeholder="Código Fraiche *" value={newItem.fraiche_code} onChange={e => setNewItem({...newItem, fraiche_code: e.target.value})} className="w-full border border-zinc-300 rounded-2xl px-5 py-3 font-mono" />
+              
+              {/* Campo Código Fraiche con botón de copiar */}
+              <div className="relative">
+                <input 
+                  placeholder="Código Fraiche *" 
+                  value={newItem.fraiche_code} 
+                  onChange={e => setNewItem({...newItem, fraiche_code: e.target.value})} 
+                  className="w-full border border-zinc-300 rounded-2xl px-5 py-3 pr-12 font-mono" 
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newItem.fraiche_code) {
+                      navigator.clipboard.writeText(newItem.fraiche_code)
+                      toast.success('Código copiado')
+                    }
+                  }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors"
+                  title="Copiar código"
+                >
+                  <Copy size={18} />
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <select value={newItem.gender} onChange={e => setNewItem({...newItem, gender: e.target.value as any})} className="border border-zinc-300 rounded-2xl px-5 py-3">
                   <option value="Caballero">Caballero</option>

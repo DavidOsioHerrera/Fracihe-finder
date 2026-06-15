@@ -3,15 +3,17 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Fuse from 'fuse.js'
 import { Search, Copy, Plus, ThumbsUp, ThumbsDown, LogIn, LogOut, User, ChevronLeft, ChevronRight } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase'
 import { PerfumeMapping } from '@/types'
 import { Toaster, toast } from 'sonner'
 import { User as SupabaseUser } from '@supabase/supabase-js'
-import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { voteOnFragrance } from '@/app/actions/vote'
 
 type GenderFilter = 'Todos' | 'Dama' | 'Caballero' | 'Unisex'
 
 export default function FraicheFinder() {
+	const supabase = createClient()
   const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [genderFilter, setGenderFilter] = useState<GenderFilter>('Todos')
@@ -34,7 +36,7 @@ export default function FraicheFinder() {
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
 
-  // === Infinite Query ===
+  // === Infinite Query (cuando no hay búsqueda) ===
   const {
     data: infiniteData,
     fetchNextPage,
@@ -97,7 +99,7 @@ export default function FraicheFinder() {
     enabled: !!user,
   })
 
-  // === Fuse.js optimizado con índice ===
+  // === Fuse.js optimizado ===
   const dataForSearch = searchTerm.length > 0 ? searchData : allFragrances
 
   const fuseIndex = useMemo(() => {
@@ -112,7 +114,7 @@ export default function FraicheFinder() {
     }, fuseIndex)
   }, [dataForSearch, fuseIndex])
 
-  // === Resultados finales ===
+  // === Resultados con paginación ===
   const filteredResults = useMemo(() => {
     let results = searchTerm.length > 0 ? searchData : allFragrances
 
@@ -125,7 +127,6 @@ export default function FraicheFinder() {
     return results
   }, [searchTerm, genderFilter, brandFilter, searchData, allFragrances, fuse])
 
-  // Paginación solo cuando hay búsqueda
   const totalPages = Math.ceil(filteredResults.length / itemsPerPage)
   const paginatedResults = searchTerm.length > 0
     ? filteredResults.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
@@ -133,7 +134,6 @@ export default function FraicheFinder() {
 
   const displayedResults = searchTerm.length > 0 ? paginatedResults : filteredResults
 
-  // Resetear página al cambiar búsqueda o filtros
   useEffect(() => {
     setCurrentPage(1)
   }, [searchTerm, genderFilter, brandFilter])
@@ -157,47 +157,25 @@ export default function FraicheFinder() {
     return () => observerRef.current?.disconnect()
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, searchTerm])
 
-  // === Votación ===
-  const voteMutation = useMutation({
-    mutationFn: async ({ fragranceId, voteType }: { fragranceId: string; voteType: 'like' | 'dislike' }) => {
-      if (!user) throw new Error('No autenticado')
-      const currentVote = userVotes[fragranceId]
+  // === Votación con Server Action (más segura) ===
+  const handleVote = async (fragranceId: string, voteType: 'like' | 'dislike') => {
+    if (!user) {
+      toast.error('Debes iniciar sesión para votar')
+      return
+    }
 
-      if (currentVote === voteType) {
-        await supabase.from('fragrance_votes').delete().eq('user_id', user.id).eq('fragrance_id', fragranceId)
-        const item = allFragrances.find(m => m.id === fragranceId)
-        if (item) {
-          const newLikes = voteType === 'like' ? Math.max(0, (item.likes || 0) - 1) : item.likes || 0
-          const newDislikes = voteType === 'dislike' ? Math.max(0, (item.dislikes || 0) - 1) : item.dislikes || 0
-          await supabase.from('perfume_mappings').update({ likes: newLikes, dislikes: newDislikes }).eq('id', fragranceId)
-        }
-        return { action: 'removed' }
-      }
-
-      if (currentVote) {
-        await supabase.from('fragrance_votes').update({ vote_type: voteType }).eq('user_id', user.id).eq('fragrance_id', fragranceId)
-      } else {
-        await supabase.from('fragrance_votes').insert({ user_id: user.id, fragrance_id: fragranceId, vote_type: voteType })
-      }
-
-      const item = allFragrances.find(m => m.id === fragranceId)
-      if (item) {
-        let newLikes = item.likes || 0
-        let newDislikes = item.dislikes || 0
-        if (currentVote === 'like') newLikes = Math.max(0, newLikes - 1)
-        if (currentVote === 'dislike') newDislikes = Math.max(0, newDislikes - 1)
-        if (voteType === 'like') newLikes++
-        if (voteType === 'dislike') newDislikes++
-        await supabase.from('perfume_mappings').update({ likes: newLikes, dislikes: newDislikes }).eq('id', fragranceId)
-      }
-      return { action: currentVote ? 'updated' : 'created' }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fragrances-infinite'] })
+    try {
+      await voteOnFragrance(fragranceId, voteType)
+      toast.success('Voto registrado')
+      
+      // Refrescar datos
       queryClient.invalidateQueries({ queryKey: ['userVotes', user?.id] })
-    },
-    onError: () => toast.error('Error al procesar tu voto'),
-  })
+      queryClient.invalidateQueries({ queryKey: ['fragrances-infinite'] })
+      queryClient.invalidateQueries({ queryKey: ['all-fragrances-search'] })
+    } catch (error: any) {
+      toast.error(error.message || 'Error al votar')
+    }
+  }
 
   // Cargar usuario
   useEffect(() => {
@@ -274,15 +252,21 @@ export default function FraicheFinder() {
 
             {user ? (
               <div className="flex items-center gap-3">
-                <span className="text-sm text-zinc-600 flex items-center gap-1"><User size={16} /> {user.email?.split('@')[0]}</span>
+                <span className="text-sm text-zinc-600 flex items-center gap-1">
+                  <User size={16} /> {user.email?.split('@')[0]}
+                </span>
                 <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-300 hover:bg-zinc-50 text-sm">
                   <LogOut size={16} /> Salir
                 </button>
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <a href="/login" className="px-4 py-2 rounded-xl border border-zinc-300 hover:bg-zinc-50 text-sm flex items-center gap-2"><LogIn size={16} /> Iniciar sesión</a>
-                <a href="/signup" className="px-4 py-2 rounded-xl bg-[#20cbd4] text-white text-sm font-medium">Registrarse</a>
+                <a href="/login" className="px-4 py-2 rounded-xl border border-zinc-300 hover:bg-zinc-50 text-sm flex items-center gap-2">
+                  <LogIn size={16} /> Iniciar sesión
+                </a>
+                <a href="/signup" className="px-4 py-2 rounded-xl bg-[#20cbd4] text-white text-sm font-medium">
+                  Registrarse
+                </a>
               </div>
             )}
           </div>
@@ -385,10 +369,10 @@ export default function FraicheFinder() {
 
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <button onClick={() => voteMutation.mutate({ fragranceId: item.id, voteType: 'like' })} disabled={!user} className={`flex items-center gap-1.5 text-sm transition-colors ${userVote === 'like' ? 'text-green-600 font-semibold' : 'hover:text-green-600'} ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <button onClick={() => handleVote(item.id, 'like')} disabled={!user} className={`flex items-center gap-1.5 text-sm transition-colors ${userVote === 'like' ? 'text-green-600 font-semibold' : 'hover:text-green-600'} ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}>
                           <ThumbsUp size={18} /> <span>{item.likes || 0}</span>
                         </button>
-                        <button onClick={() => voteMutation.mutate({ fragranceId: item.id, voteType: 'dislike' })} disabled={!user} className={`flex items-center gap-1.5 text-sm transition-colors ${userVote === 'dislike' ? 'text-red-600 font-semibold' : 'hover:text-red-600'} ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <button onClick={() => handleVote(item.id, 'dislike')} disabled={!user} className={`flex items-center gap-1.5 text-sm transition-colors ${userVote === 'dislike' ? 'text-red-600 font-semibold' : 'hover:text-red-600'} ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}>
                           <ThumbsDown size={18} /> <span>{item.dislikes || 0}</span>
                         </button>
                       </div>

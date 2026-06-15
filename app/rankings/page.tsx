@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient} from '@/lib/supabase'
 import { PerfumeMapping } from '@/types'
 import { ArrowLeft, Search } from 'lucide-react'
 
@@ -9,6 +9,7 @@ type GenderFilter = 'Todos' | 'Dama' | 'Caballero' | 'Unisex'
 type ItemsPerPage = 10 | 20 | 50 | 100
 
 export default function RankingsPage() {
+	const supabase = createClient()
   const [rankings, setRankings] = useState<PerfumeMapping[]>([])
   const [genderFilter, setGenderFilter] = useState<GenderFilter>('Todos')
   const [searchTerm, setSearchTerm] = useState('')

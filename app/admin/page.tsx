@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@/lib/supabase'
 import { PerfumeMapping } from '@/types'
 import { Toaster, toast } from 'sonner'
 import { Check, Trash2, Edit2, LogOut, Home, Plus, X, Copy, ChevronLeft, ChevronRight } from 'lucide-react'
 import { createFragrance, updateFragrance, deleteFragrance, verifyFragrance } from './actions'
 
 export default function AdminPanel() {
+	const supabase = createClient()	
   const [mappings, setMappings] = useState<PerfumeMapping[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)

@@ -157,7 +157,7 @@ export default function FraicheFinder() {
   const getCategoryBadge = (category: string) => {
     if (category === 'niche') return <span className="px-3 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 font-medium">Niche</span>
     if (category === 'arabe') return <span className="px-3 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 font-medium">Árabe</span>
-    return <span className="px-3 py-0.5 text-xs rounded-full bg-zinc-100 text-zinc-700 font-medium">Serie Normal</span>
+    return <span className="px-3 py-0.5 text-xs rounded-full bg-zinc-100 text-zinc-700 font-medium">Normal</span>
   }
 
   return (

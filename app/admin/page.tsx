@@ -38,7 +38,7 @@ export default function AdminPanel() {
   const getCategoryBadge = (category: string) => {
     if (category === 'niche') return <span className="px-3 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 font-medium">Niche</span>
     if (category === 'arabe') return <span className="px-3 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 font-medium">Árabe</span>
-    return <span className="px-3 py-0.5 text-xs rounded-full bg-zinc-100 text-zinc-700 font-medium">Serie Normal</span>
+    return <span className="px-3 py-0.5 text-xs rounded-full bg-zinc-100 text-zinc-700 font-medium">Normal</span>
   }
 
   const fetchMappings = async () => {
@@ -216,7 +216,7 @@ export default function AdminPanel() {
                   <option value="Caballero">Caballero</option><option value="Dama">Dama</option><option value="Unisex">Unisex</option>
                 </select>
                 <select className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.category || 'normal'} onChange={e => setEditingItem({...editingItem, category: e.target.value as any})}>
-                  <option value="normal">Serie Normal</option>
+                  <option value="normal">Normal</option>
                   <option value="niche">Niche</option>
                   <option value="arabe">Árabe</option>
                 </select>

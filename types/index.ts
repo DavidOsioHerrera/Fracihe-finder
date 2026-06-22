@@ -4,10 +4,10 @@ export interface PerfumeMapping {
   brand?: string | null;
   fraiche_code: string;
   gender?: 'Dama' | 'Caballero' | 'Unisex' | null;
-  cost_per_gram?: number | null;
+  category?: 'normal' | 'niche' | 'arabe' | null;   // ← Nueva columna
   link?: string | null;
   is_verified?: boolean;
-  likes?: number | null;        // ← Agregado
-  dislikes?: number | null;     // ← Agregado
+  likes?: number | null;
+  dislikes?: number | null;
   created_at?: string;
 }

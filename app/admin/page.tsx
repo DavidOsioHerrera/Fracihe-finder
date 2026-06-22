@@ -18,13 +18,27 @@ export default function AdminPanel() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [sortBy, setSortBy] = useState<'created_at' | 'original_name'>('created_at')
 
-  const [newItem, setNewItem] = useState({ original_name: '', brand: '', fraiche_code: '', gender: 'Caballero' as 'Dama' | 'Caballero' | 'Unisex', cost_per_gram: '', link: '' })
+  const [newItem, setNewItem] = useState({
+    original_name: '',
+    brand: '',
+    fraiche_code: '',
+    gender: 'Caballero' as 'Dama' | 'Caballero' | 'Unisex',
+    category: 'normal' as 'normal' | 'niche' | 'arabe',
+    link: '',
+  })
+
   const router = useRouter()
 
   const getGenderBadge = (gender: string) => {
     if (gender === 'Caballero') return <span className="px-3 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 font-medium">Caballero</span>
     if (gender === 'Dama') return <span className="px-3 py-0.5 text-xs rounded-full bg-pink-100 text-pink-700 font-medium">Dama</span>
     return <span className="px-3 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700 font-medium">Unisex</span>
+  }
+
+  const getCategoryBadge = (category: string) => {
+    if (category === 'niche') return <span className="px-3 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 font-medium">Niche</span>
+    if (category === 'arabe') return <span className="px-3 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 font-medium">Árabe</span>
+    return <span className="px-3 py-0.5 text-xs rounded-full bg-zinc-100 text-zinc-700 font-medium">Serie Normal</span>
   }
 
   const fetchMappings = async () => {
@@ -60,7 +74,7 @@ export default function AdminPanel() {
       await createFragrance(formData)
       toast.success('Fragancia creada')
       setShowCreateModal(false)
-      setNewItem({ original_name: '', brand: '', fraiche_code: '', gender: 'Caballero', cost_per_gram: '', link: '' })
+      setNewItem({ original_name: '', brand: '', fraiche_code: '', gender: 'Caballero', category: 'normal', link: '' })
       fetchMappings()
     } catch (error: any) { toast.error(error.message) }
   }
@@ -74,7 +88,7 @@ export default function AdminPanel() {
       formData.append('brand', editingItem.brand || '')
       formData.append('fraiche_code', editingItem.fraiche_code)
       formData.append('gender', editingItem.gender || '')
-      formData.append('cost_per_gram', editingItem.cost_per_gram?.toString() || '')
+      formData.append('category', editingItem.category || 'normal')
       formData.append('link', editingItem.link || '')
       await updateFragrance(editingItem.id, formData)
       toast.success('Actualizado')
@@ -128,7 +142,7 @@ export default function AdminPanel() {
                 <th className="text-left p-5">Marca</th>
                 <th className="text-left p-5">Código</th>
                 <th className="text-left p-5">Género</th>
-                <th className="text-left p-5">Costo/g</th>
+                <th className="text-left p-5">Categoría</th>
                 <th className="text-center p-5">Estado</th>
                 <th className="text-right p-5 pr-8">Acciones</th>
               </tr>
@@ -140,7 +154,7 @@ export default function AdminPanel() {
                   <td className="p-5 text-sm">{item.brand || '-'}</td>
                   <td className="p-5 font-mono text-[#20cbd4]">{item.fraiche_code}</td>
                   <td className="p-5">{item.gender && getGenderBadge(item.gender)}</td>
-                  <td className="p-5 text-sm">{item.cost_per_gram ? `$${item.cost_per_gram}` : '-'}</td>
+                  <td className="p-5">{item.category && getCategoryBadge(item.category)}</td>
                   <td className="p-5 text-center">
                     {item.is_verified ? <span className="px-3 py-1 text-xs bg-green-100 text-green-700 rounded-full">Verificado</span> : <span className="px-3 py-1 text-xs bg-amber-100 text-amber-700 rounded-full">Pendiente</span>}
                   </td>
@@ -158,7 +172,7 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {/* Modales de Crear y Editar */}
+      {/* Modal Crear */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-8 relative">
@@ -172,8 +186,14 @@ export default function AdminPanel() {
                 <button type="button" onClick={() => { if (newItem.fraiche_code) { navigator.clipboard.writeText(newItem.fraiche_code); toast.success('Copiado') }}} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"><Copy size={18} /></button>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <select value={newItem.gender} onChange={e => setNewItem({...newItem, gender: e.target.value as any})} className="border border-zinc-300 rounded-2xl px-5 py-3"><option value="Caballero">Caballero</option><option value="Dama">Dama</option><option value="Unisex">Unisex</option></select>
-                <input type="number" step="0.01" placeholder="Costo/g" value={newItem.cost_per_gram} onChange={e => setNewItem({...newItem, cost_per_gram: e.target.value})} className="border border-zinc-300 rounded-2xl px-5 py-3" />
+                <select value={newItem.gender} onChange={e => setNewItem({...newItem, gender: e.target.value as any})} className="border border-zinc-300 rounded-2xl px-5 py-3">
+                  <option value="Caballero">Caballero</option><option value="Dama">Dama</option><option value="Unisex">Unisex</option>
+                </select>
+                <select value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value as any})} className="border border-zinc-300 rounded-2xl px-5 py-3">
+                  <option value="normal">Normal</option>
+                  <option value="niche">Niche</option>
+                  <option value="arabe">Árabe</option>
+                </select>
               </div>
               <input placeholder="Link" value={newItem.link} onChange={e => setNewItem({...newItem, link: e.target.value})} className="w-full border border-zinc-300 rounded-2xl px-5 py-3" />
               <button type="submit" className="w-full py-3 rounded-2xl bg-[#20cbd4] text-white font-semibold">Crear fragancia</button>
@@ -182,6 +202,7 @@ export default function AdminPanel() {
         </div>
       )}
 
+      {/* Modal Editar */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-8">
@@ -191,8 +212,14 @@ export default function AdminPanel() {
               <input className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.brand || ''} onChange={e => setEditingItem({...editingItem, brand: e.target.value})} />
               <input className="w-full border border-zinc-300 rounded-2xl px-5 py-3 font-mono" value={editingItem.fraiche_code} onChange={e => setEditingItem({...editingItem, fraiche_code: e.target.value})} />
               <div className="grid grid-cols-2 gap-4">
-                <select className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.gender || ''} onChange={e => setEditingItem({...editingItem, gender: e.target.value as any})}><option value="Caballero">Caballero</option><option value="Dama">Dama</option><option value="Unisex">Unisex</option></select>
-                <input type="number" step="0.01" className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.cost_per_gram || ''} onChange={e => setEditingItem({...editingItem, cost_per_gram: parseFloat(e.target.value) || null})} />
+                <select className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.gender || ''} onChange={e => setEditingItem({...editingItem, gender: e.target.value as any})}>
+                  <option value="Caballero">Caballero</option><option value="Dama">Dama</option><option value="Unisex">Unisex</option>
+                </select>
+                <select className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.category || 'normal'} onChange={e => setEditingItem({...editingItem, category: e.target.value as any})}>
+                  <option value="normal">Serie Normal</option>
+                  <option value="niche">Niche</option>
+                  <option value="arabe">Árabe</option>
+                </select>
               </div>
               <input placeholder="Link" className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.link || ''} onChange={e => setEditingItem({...editingItem, link: e.target.value})} />
               <div className="flex gap-3 mt-6">

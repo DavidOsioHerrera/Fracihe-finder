@@ -29,7 +29,7 @@ export default function FraicheFinder() {
     brand: '',
     fraiche_code: '',
     gender: 'Caballero' as 'Dama' | 'Caballero' | 'Unisex',
-    cost_per_gram: '',
+    category: 'normal' as 'normal' | 'niche' | 'arabe',
   })
   const [submitting, setSubmitting] = useState(false)
 
@@ -148,11 +148,16 @@ export default function FraicheFinder() {
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setIsAdmin(false); toast.info('Sesión cerrada') }
   const clearFilters = () => { setGenderFilter('Todos'); setBrandFilter('Todas') }
 
-  // === Badge de Género con colores ===
   const getGenderBadge = (gender: string) => {
     if (gender === 'Caballero') return <span className="px-3 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700 font-medium">Caballero</span>
     if (gender === 'Dama') return <span className="px-3 py-0.5 text-xs rounded-full bg-pink-100 text-pink-700 font-medium">Dama</span>
     return <span className="px-3 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700 font-medium">Unisex</span>
+  }
+
+  const getCategoryBadge = (category: string) => {
+    if (category === 'niche') return <span className="px-3 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 font-medium">Niche</span>
+    if (category === 'arabe') return <span className="px-3 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 font-medium">Árabe</span>
+    return <span className="px-3 py-0.5 text-xs rounded-full bg-zinc-100 text-zinc-700 font-medium">Serie Normal</span>
   }
 
   return (
@@ -218,7 +223,11 @@ export default function FraicheFinder() {
       </div>
 
       <div className="max-w-5xl mx-auto px-6 pb-20 pt-4">
-        {(isPending || (searchTerm.length > 0 && searchData.length === 0 && searchTerm.length > 1)) ? <div className="text-center py-16 text-zinc-500">Cargando...</div> : displayedResults.length === 0 ? <div className="text-center py-16"><p className="text-2xl text-zinc-500">No se encontraron resultados</p></div> : (
+        {(isPending || (searchTerm.length > 0 && searchData.length === 0 && searchTerm.length > 1)) ? (
+          <div className="text-center py-16 text-zinc-500">Cargando...</div>
+        ) : displayedResults.length === 0 ? (
+          <div className="text-center py-16"><p className="text-2xl text-zinc-500">No se encontraron resultados</p></div>
+        ) : (
           <>
             <div className="grid md:grid-cols-2 gap-4">
               {displayedResults.map((item) => {
@@ -233,7 +242,7 @@ export default function FraicheFinder() {
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         {item.gender && getGenderBadge(item.gender)}
-                        {item.cost_per_gram && <span className="px-3 py-0.5 text-xs rounded-full bg-[#e0f7fa] text-[#0e9aa8]">${item.cost_per_gram} /g</span>}
+                        {item.category && getCategoryBadge(item.category)}
                       </div>
                     </div>
 
@@ -261,8 +270,19 @@ export default function FraicheFinder() {
               })}
             </div>
 
-            {searchTerm.length > 0 && totalPages > 1 && <div className="flex justify-center items-center gap-4 mt-8"><button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-xl border border-zinc-300 disabled:opacity-50">Anterior</button><span className="text-sm text-zinc-600">Página {currentPage} de {totalPages}</span><button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 rounded-xl border border-zinc-300 disabled:opacity-50">Siguiente</button></div>}
-            {searchTerm.length === 0 && hasNextPage && <div ref={loadMoreRef} className="h-10 flex justify-center items-center mt-8">{isFetchingNextPage && <p className="text-zinc-500">Cargando más fragancias...</p>}</div>}
+            {searchTerm.length > 0 && totalPages > 1 && (
+              <div className="flex justify-center items-center gap-4 mt-8">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-xl border border-zinc-300 disabled:opacity-50">Anterior</button>
+                <span className="text-sm text-zinc-600">Página {currentPage} de {totalPages}</span>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 rounded-xl border border-zinc-300 disabled:opacity-50">Siguiente</button>
+              </div>
+            )}
+
+            {searchTerm.length === 0 && hasNextPage && (
+              <div ref={loadMoreRef} className="h-10 flex justify-center items-center mt-8">
+                {isFetchingNextPage && <p className="text-zinc-500">Cargando más fragancias...</p>}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -278,7 +298,7 @@ export default function FraicheFinder() {
               <input type="text" placeholder="Código Fraiche *" value={formData.fraiche_code} onChange={e => setFormData({ ...formData, fraiche_code: e.target.value })} className="w-full bg-white border border-zinc-300 rounded-2xl px-5 py-3.5 font-mono" required />
               <div className="grid grid-cols-2 gap-4">
                 <select value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value as any })} className="bg-white border border-zinc-300 rounded-2xl px-5 py-3.5"><option value="Caballero">Caballero</option><option value="Dama">Dama</option><option value="Unisex">Unisex</option></select>
-                <input type="number" step="0.01" placeholder="Costo por gramo (opcional)" value={formData.cost_per_gram} onChange={e => setFormData({ ...formData, cost_per_gram: e.target.value })} className="bg-white border border-zinc-300 rounded-2xl px-5 py-3.5" />
+                <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value as any })} className="bg-white border border-zinc-300 rounded-2xl px-5 py-3.5"><option value="normal">Normal</option><option value="niche">Niche</option><option value="arabe">Árabe</option></select>
               </div>
               <button type="submit" disabled={submitting} className="w-full py-4 mt-4 rounded-2xl bg-[#20cbd4] hover:bg-[#1bb8c2] text-white font-semibold disabled:opacity-70">Enviar sugerencia</button>
             </form>

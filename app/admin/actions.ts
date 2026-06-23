@@ -39,6 +39,7 @@ export async function createFragrance(formData: FormData) {
     cost_per_gram: formData.get('cost_per_gram') 
       ? parseFloat(formData.get('cost_per_gram') as string) 
       : null,
+	  category: formData.get('category') as string || 'normal',
     link: formData.get('link') as string || null,
     is_verified: true,
   })

@@ -56,7 +56,7 @@ export async function updateFragrance(id: string, formData: FormData) {
     throw new Error('No tienes permisos de administrador')
   }
 
-  const supabase = await createClient()                    // ← Agregado await
+  const supabase = await createClient()
 
   const { error } = await supabase
     .from('perfume_mappings')
@@ -64,10 +64,8 @@ export async function updateFragrance(id: string, formData: FormData) {
       original_name: formData.get('original_name') as string,
       brand: formData.get('brand') as string || null,
       fraiche_code: formData.get('fraiche_code') as string,
-      gender: formData.get('gender') as string,
-      cost_per_gram: formData.get('cost_per_gram') 
-        ? parseFloat(formData.get('cost_per_gram') as string) 
-        : null,
+      gender: formData.get('gender') as string || null,
+      category: formData.get('category') as string || 'serie_normal',   // ← Agregado
       link: formData.get('link') as string || null,
     })
     .eq('id', id)

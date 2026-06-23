@@ -203,33 +203,77 @@ export default function AdminPanel() {
       )}
 
       {/* Modal Editar */}
-      {editingItem && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md p-8">
-            <h3 className="text-xl font-semibold mb-6">Editar fragancia</h3>
-            <form onSubmit={handleUpdate} className="space-y-4">
-              <input className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.original_name} onChange={e => setEditingItem({...editingItem, original_name: e.target.value})} />
-              <input className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.brand || ''} onChange={e => setEditingItem({...editingItem, brand: e.target.value})} />
-              <input className="w-full border border-zinc-300 rounded-2xl px-5 py-3 font-mono" value={editingItem.fraiche_code} onChange={e => setEditingItem({...editingItem, fraiche_code: e.target.value})} />
-              <div className="grid grid-cols-2 gap-4">
-                <select className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.gender || ''} onChange={e => setEditingItem({...editingItem, gender: e.target.value as any})}>
-                  <option value="Caballero">Caballero</option><option value="Dama">Dama</option><option value="Unisex">Unisex</option>
-                </select>
-                <select className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.category || 'normal'} onChange={e => setEditingItem({...editingItem, category: e.target.value as any})}>
-                  <option value="normal">Normal</option>
-                  <option value="niche">Niche</option>
-                  <option value="arabe">Árabe</option>
-                </select>
-              </div>
-              <input placeholder="Link" className="w-full border border-zinc-300 rounded-2xl px-5 py-3" value={editingItem.link || ''} onChange={e => setEditingItem({...editingItem, link: e.target.value})} />
-              <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setEditingItem(null)} className="flex-1 py-3 rounded-2xl border border-zinc-300">Cancelar</button>
-                <button type="submit" className="flex-1 py-3 rounded-2xl bg-[#20cbd4] text-white">Guardar</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+		{editingItem && (
+		  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+			<div className="bg-white rounded-3xl w-full max-w-md p-8">
+			  <h3 className="text-xl font-semibold mb-6">Editar fragancia</h3>
+			  <form onSubmit={handleUpdate} className="space-y-4">
+				<input 
+				  className="w-full border border-zinc-300 rounded-2xl px-5 py-3" 
+				  value={editingItem.original_name} 
+				  onChange={e => setEditingItem({...editingItem, original_name: e.target.value})} 
+				/>
+				<input 
+				  className="w-full border border-zinc-300 rounded-2xl px-5 py-3" 
+				  value={editingItem.brand || ''} 
+				  onChange={e => setEditingItem({...editingItem, brand: e.target.value})} 
+				/>
+				<input 
+				  className="w-full border border-zinc-300 rounded-2xl px-5 py-3 font-mono" 
+				  value={editingItem.fraiche_code} 
+				  onChange={e => setEditingItem({...editingItem, fraiche_code: e.target.value})} 
+				/>
+
+				<div className="grid grid-cols-2 gap-4">
+				  {/* Género */}
+				  <select 
+					className="w-full border border-zinc-300 rounded-2xl px-5 py-3" 
+					value={editingItem.gender || ''} 
+					onChange={e => setEditingItem({...editingItem, gender: e.target.value as any})}
+				  >
+					<option value="Caballero">Caballero</option>
+					<option value="Dama">Dama</option>
+					<option value="Unisex">Unisex</option>
+				  </select>
+
+				  {/* Categoría - CORREGIDO */}
+				  <select 
+					className="w-full border border-zinc-300 rounded-2xl px-5 py-3" 
+					value={editingItem.category || 'normal'} 
+					onChange={e => setEditingItem({...editingItem, category: e.target.value as any})}
+				  >
+					<option value="normal">Normal</option>
+					<option value="niche">Niche</option>
+					<option value="arabe">Árabe</option>
+				  </select>
+				</div>
+
+				<input 
+				  placeholder="Link" 
+				  className="w-full border border-zinc-300 rounded-2xl px-5 py-3" 
+				  value={editingItem.link || ''} 
+				  onChange={e => setEditingItem({...editingItem, link: e.target.value})} 
+				/>
+
+				<div className="flex gap-3 mt-6">
+				  <button 
+					type="button" 
+					onClick={() => setEditingItem(null)} 
+					className="flex-1 py-3 rounded-2xl border border-zinc-300"
+				  >
+					Cancelar
+				  </button>
+				  <button 
+					type="submit" 
+					className="flex-1 py-3 rounded-2xl bg-[#20cbd4] text-white"
+				  >
+					Guardar cambios
+				  </button>
+				</div>
+			  </form>
+			</div>
+		  </div>
+		)}
     </div>
   )
 }

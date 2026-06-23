@@ -65,7 +65,7 @@ export async function updateFragrance(id: string, formData: FormData) {
       brand: formData.get('brand') as string || null,
       fraiche_code: formData.get('fraiche_code') as string,
       gender: formData.get('gender') as string || null,
-      category: formData.get('category') as string || 'serie_normal',   // ← Agregado
+      category: formData.get('category') as string || 'normal',   // ← Agregado
       link: formData.get('link') as string || null,
     })
     .eq('id', id)
